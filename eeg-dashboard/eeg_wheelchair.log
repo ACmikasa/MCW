@@ -1,0 +1,12 @@
+2026-01-17 14:29:24,930 [INFO] eeg_wheelchair_control.signal_processor: SignalProcessor initialized (fs=125 Hz)
+2026-01-17 14:29:24,935 [INFO] eeg_wheelchair_control.signal_processor: SignalProcessor initialized (fs=125 Hz)
+2026-01-17 14:29:24,935 [INFO] eeg_wheelchair_control.command_detector: CommandDetector initialized
+2026-01-17 14:29:24,935 [INFO] eeg_wheelchair_control.command_detector: Thresholds: {'blink_threshold': 50.0, 'jaw_threshold': 500.0, 'eye_move_threshold': 30.0, 'lateral_ratio': 1.3, 'baseline_amplitude': 20.0, 'baseline_jaw_power': 200.0}
+2026-01-17 14:29:24,935 [INFO] eeg_wheelchair_control.wheelchair_interface: MockWheelchairInterface initialized
+2026-01-17 14:29:35,025 [INFO] eeg_wheelchair_control.signal_processor: SignalProcessor initialized (fs=125 Hz)
+2026-01-17 14:29:35,025 [INFO] eeg_wheelchair_control.command_detector: CommandDetector initialized
+2026-01-17 14:29:35,025 [INFO] eeg_wheelchair_control.command_detector: Thresholds: {'blink_threshold': 30.0, 'jaw_threshold': 100.0, 'eye_move_threshold': 20.0, 'lateral_ratio': 1.2, 'baseline_amplitude': 10.0, 'baseline_jaw_power': 50.0}
+2026-01-17 14:29:35,028 [INFO] eeg_wheelchair_control.command_detector: Command detected: forward (confidence: 1.00)
+2026-01-17 14:29:35,029 [INFO] eeg_wheelchair_control.command_detector: Command detected: backward (confidence: 1.00)
+2026-01-17 14:29:35,029 [INFO] eeg_wheelchair_control.command_detector: Command detected: left (confidence: 1.00)
+2026-01-17 14:29:35,030 [INFO] eeg_wheelchair_control.command_detector: Command detected: right (confidence: 0.93)
