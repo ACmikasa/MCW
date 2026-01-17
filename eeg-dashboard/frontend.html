@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OpenBCI Cyton + Daisy EEG Dashboard</title>
+    <title>OpenBCI EEG Dashboard + Wheelchair Control</title>
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
     <style>
         * {
@@ -40,6 +40,11 @@
             margin-top: 0.25rem;
         }
 
+        .status-badges {
+            display: flex;
+            gap: 0.75rem;
+        }
+
         .status-badge {
             display: inline-flex;
             align-items: center;
@@ -66,6 +71,12 @@
             animation: pulse 1.5s infinite;
         }
 
+        .status-badge.wheelchair-active {
+            background: rgba(255, 165, 2, 0.2);
+            color: #ffa502;
+            animation: pulse 1.5s infinite;
+        }
+
         @keyframes pulse {
             0%, 100% { opacity: 1; }
             50% { opacity: 0.6; }
@@ -80,13 +91,13 @@
 
         .main-container {
             display: grid;
-            grid-template-columns: 280px 1fr;
+            grid-template-columns: 280px 1fr 320px;
             gap: 1rem;
             padding: 1rem;
             height: calc(100vh - 80px);
         }
 
-        .control-panel {
+        .control-panel, .wheelchair-panel {
             background: #12121a;
             border-radius: 12px;
             padding: 1.25rem;
@@ -106,18 +117,7 @@
             margin-bottom: 0.75rem;
         }
 
-        .port-select {
-            width: 100%;
-            padding: 0.75rem;
-            background: #1a1a2e;
-            border: 1px solid #2a2a4a;
-            border-radius: 8px;
-            color: #e0e0e0;
-            font-size: 0.9rem;
-            margin-bottom: 0.5rem;
-        }
-
-        .port-input {
+        .port-select, .port-input {
             width: 100%;
             padding: 0.75rem;
             background: #1a1a2e;
@@ -188,6 +188,16 @@
             background: #3a3a5a;
         }
 
+        .btn-warning {
+            background: linear-gradient(135deg, #ffa502 0%, #cc8400 100%);
+            color: #000;
+        }
+
+        .btn-warning:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 15px rgba(255, 165, 2, 0.3);
+        }
+
         .btn-small {
             padding: 0.5rem 0.75rem;
             font-size: 0.8rem;
@@ -217,37 +227,6 @@
             color: #666;
             text-transform: uppercase;
             margin-top: 0.25rem;
-        }
-
-        .csv-controls {
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
-        }
-
-        .csv-filename {
-            padding: 0.6rem;
-            background: #1a1a2e;
-            border: 1px solid #2a2a4a;
-            border-radius: 6px;
-            color: #e0e0e0;
-            font-size: 0.85rem;
-        }
-
-        .recording-indicator {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            color: #ff4757;
-            font-size: 0.85rem;
-            animation: pulse 1s infinite;
-        }
-
-        .recording-dot {
-            width: 8px;
-            height: 8px;
-            background: #ff4757;
-            border-radius: 50%;
         }
 
         .chart-container {
@@ -282,13 +261,6 @@
             min-height: 0;
         }
 
-        .channel-label {
-            position: absolute;
-            left: 5px;
-            font-size: 0.7rem;
-            color: #888;
-        }
-
         .log-panel {
             margin-top: 0.5rem;
             padding: 0.5rem;
@@ -305,41 +277,10 @@
             border-bottom: 1px solid #1a1a2e;
         }
 
-        .log-entry.error {
-            color: #ff4757;
-        }
-
-        .log-entry.success {
-            color: #2ed573;
-        }
-
-        .log-entry.info {
-            color: #00d4ff;
-        }
-
-        .toggle-group {
-            display: flex;
-            gap: 0.5rem;
-            margin-bottom: 0.5rem;
-        }
-
-        .toggle-btn {
-            flex: 1;
-            padding: 0.5rem;
-            background: #1a1a2e;
-            border: 1px solid #2a2a4a;
-            border-radius: 6px;
-            color: #888;
-            font-size: 0.8rem;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .toggle-btn.active {
-            background: #00d4ff;
-            color: #000;
-            border-color: #00d4ff;
-        }
+        .log-entry.error { color: #ff4757; }
+        .log-entry.success { color: #2ed573; }
+        .log-entry.info { color: #00d4ff; }
+        .log-entry.command { color: #ffa502; }
 
         .time-window-slider {
             width: 100%;
@@ -353,31 +294,198 @@
             color: #666;
         }
 
-        /* Custom scrollbar */
-        ::-webkit-scrollbar {
-            width: 6px;
-        }
-
-        ::-webkit-scrollbar-track {
+        /* Wheelchair Control Panel Styles */
+        .command-display {
             background: #1a1a2e;
+            border-radius: 12px;
+            padding: 1.5rem;
+            text-align: center;
+            margin-bottom: 1rem;
+            border: 2px solid #2a2a4a;
+            transition: all 0.3s;
         }
 
-        ::-webkit-scrollbar-thumb {
-            background: #3a3a5a;
-            border-radius: 3px;
+        .command-display.active {
+            border-color: #ffa502;
+            box-shadow: 0 0 20px rgba(255, 165, 2, 0.3);
         }
 
-        ::-webkit-scrollbar-thumb:hover {
-            background: #4a4a6a;
+        .command-display.forward { border-color: #2ed573; background: rgba(46, 213, 115, 0.1); }
+        .command-display.backward { border-color: #ff4757; background: rgba(255, 71, 87, 0.1); }
+        .command-display.left { border-color: #00d4ff; background: rgba(0, 212, 255, 0.1); }
+        .command-display.right { border-color: #ffa502; background: rgba(255, 165, 2, 0.1); }
+
+        .command-icon {
+            font-size: 3rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .command-text {
+            font-size: 1.5rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        .command-confidence {
+            font-size: 0.9rem;
+            color: #888;
+            margin-top: 0.25rem;
+        }
+
+        .feature-display {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .feature-card {
+            background: #1a1a2e;
+            border-radius: 8px;
+            padding: 0.75rem;
+            text-align: center;
+        }
+
+        .feature-card.highlight {
+            border: 1px solid #ffa502;
+        }
+
+        .feature-value {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #00d4ff;
+        }
+
+        .feature-label {
+            font-size: 0.65rem;
+            color: #666;
+            text-transform: uppercase;
+        }
+
+        .toggle-switch {
+            position: relative;
+            width: 100%;
+            height: 44px;
+            background: #1a1a2e;
+            border-radius: 22px;
+            cursor: pointer;
+            margin-bottom: 0.75rem;
+            border: 1px solid #2a2a4a;
+            overflow: hidden;
+        }
+
+        .toggle-switch input {
+            display: none;
+        }
+
+        .toggle-switch .slider {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s;
+        }
+
+        .toggle-switch .slider::before {
+            content: 'WHEELCHAIR OFF';
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #666;
+        }
+
+        .toggle-switch input:checked + .slider {
+            background: linear-gradient(135deg, #ffa502 0%, #cc8400 100%);
+        }
+
+        .toggle-switch input:checked + .slider::before {
+            content: 'WHEELCHAIR ON';
+            color: #000;
+        }
+
+        .command-history {
+            max-height: 150px;
+            overflow-y: auto;
+        }
+
+        .history-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem;
+            background: #1a1a2e;
+            border-radius: 6px;
+            margin-bottom: 0.5rem;
+            font-size: 0.8rem;
+        }
+
+        .history-command {
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .history-command.forward { color: #2ed573; }
+        .history-command.backward { color: #ff4757; }
+        .history-command.left { color: #00d4ff; }
+        .history-command.right { color: #ffa502; }
+
+        .history-confidence {
+            color: #666;
+        }
+
+        .calibration-bar {
+            height: 8px;
+            background: #1a1a2e;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 0.5rem;
+        }
+
+        .calibration-progress {
+            height: 100%;
+            background: linear-gradient(90deg, #00d4ff, #2ed573);
+            border-radius: 4px;
+            transition: width 0.2s;
+        }
+
+        .cooldown-bar {
+            height: 4px;
+            background: #1a1a2e;
+            border-radius: 2px;
+            margin-top: 0.5rem;
+            overflow: hidden;
+        }
+
+        .cooldown-progress {
+            height: 100%;
+            background: #ffa502;
+            border-radius: 2px;
+            transition: width 0.1s;
+        }
+
+        /* Custom scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #1a1a2e; }
+        ::-webkit-scrollbar-thumb { background: #3a3a5a; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #4a4a6a; }
+
+        @media (max-width: 1400px) {
+            .main-container {
+                grid-template-columns: 250px 1fr 280px;
+            }
         }
 
         @media (max-width: 1200px) {
             .main-container {
                 grid-template-columns: 1fr;
-                grid-template-rows: auto 1fr;
+                grid-template-rows: auto auto 1fr;
             }
 
-            .control-panel {
+            .control-panel, .wheelchair-panel {
                 display: grid;
                 grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
                 gap: 1rem;
@@ -393,17 +501,23 @@
     <header class="header">
         <div>
             <h1>OpenBCI EEG Dashboard</h1>
-            <div class="subtitle">Cyton + Daisy | 16 Channels | BrainFlow</div>
+            <div class="subtitle">Cyton + Daisy | 16 Channels | Wheelchair Control</div>
         </div>
-        <div id="status-badge" class="status-badge disconnected">
-            <span class="status-dot"></span>
-            <span id="status-text">Disconnected</span>
+        <div class="status-badges">
+            <div id="status-badge" class="status-badge disconnected">
+                <span class="status-dot"></span>
+                <span id="status-text">Disconnected</span>
+            </div>
+            <div id="wheelchair-badge" class="status-badge disconnected" style="display: none;">
+                <span class="status-dot"></span>
+                <span id="wheelchair-status-text">Wheelchair Off</span>
+            </div>
         </div>
     </header>
 
     <div class="main-container">
+        <!-- Left Panel: Connection & Stats -->
         <aside class="control-panel">
-            <!-- Connection Section -->
             <div class="control-section">
                 <h3>Connection</h3>
                 <select id="port-select" class="port-select">
@@ -415,14 +529,12 @@
                 <button id="disconnect-btn" class="btn btn-danger" disabled>Disconnect</button>
             </div>
 
-            <!-- Streaming Section -->
             <div class="control-section">
                 <h3>Streaming</h3>
                 <button id="start-btn" class="btn btn-success" disabled>Start Streaming</button>
                 <button id="stop-btn" class="btn btn-danger" disabled>Stop Streaming</button>
             </div>
 
-            <!-- Statistics Section -->
             <div class="control-section">
                 <h3>Statistics</h3>
                 <div class="stats-grid">
@@ -442,57 +554,33 @@
                         <div class="stat-value" id="stat-dropped">0</div>
                         <div class="stat-label">Dropped</div>
                     </div>
-                    <div class="stat-card">
-                        <div class="stat-value" id="stat-elapsed">0:00</div>
-                        <div class="stat-label">Elapsed</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-value" id="stat-effective">--</div>
-                        <div class="stat-label">Eff. Rate</div>
-                    </div>
                 </div>
             </div>
 
-            <!-- Display Settings -->
             <div class="control-section">
-                <h3>Display Settings</h3>
+                <h3>Display</h3>
                 <div class="slider-label">
                     <span>Time Window</span>
                     <span id="time-window-value">5s</span>
                 </div>
                 <input type="range" id="time-window" class="time-window-slider" min="1" max="30" value="5">
-
-                <div class="slider-label" style="margin-top: 0.75rem;">
+                <div class="slider-label" style="margin-top: 0.5rem;">
                     <span>Y-Scale (uV)</span>
                     <span id="y-scale-value">100</span>
                 </div>
                 <input type="range" id="y-scale" class="time-window-slider" min="25" max="500" value="100" step="25">
             </div>
 
-            <!-- CSV Recording Section -->
-            <div class="control-section">
-                <h3>CSV Recording</h3>
-                <div class="csv-controls">
-                    <input type="text" id="csv-filename" class="csv-filename" placeholder="recording.csv">
-                    <button id="start-csv-btn" class="btn btn-secondary" disabled>Start Recording</button>
-                    <button id="stop-csv-btn" class="btn btn-danger" disabled style="display: none;">Stop Recording</button>
-                    <div id="recording-indicator" class="recording-indicator" style="display: none;">
-                        <span class="recording-dot"></span>
-                        <span>Recording...</span>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Log Section -->
             <div class="control-section">
                 <h3>Log</h3>
                 <div id="log-panel" class="log-panel"></div>
             </div>
         </aside>
 
+        <!-- Center: EEG Chart -->
         <main class="chart-container">
             <div class="chart-header">
-                <h2>EEG Channels (1-16)</h2>
+                <h2>EEG Channels (1-16) | FP1=Ch9, FP2=Ch10</h2>
                 <div class="chart-controls">
                     <button id="autoscale-btn" class="btn btn-secondary btn-small">Autoscale</button>
                     <button id="clear-btn" class="btn btn-secondary btn-small">Clear</button>
@@ -500,6 +588,84 @@
             </div>
             <div id="eeg-chart"></div>
         </main>
+
+        <!-- Right Panel: Wheelchair Control -->
+        <aside class="wheelchair-panel">
+            <div class="control-section">
+                <h3>Wheelchair Control</h3>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="wheelchair-toggle">
+                    <span class="slider"></span>
+                </label>
+                <button id="calibrate-btn" class="btn btn-warning" disabled>Calibrate (10s)</button>
+                <div id="calibration-status" style="display: none;">
+                    <div class="slider-label">
+                        <span>Calibrating...</span>
+                        <span id="calibration-percent">0%</span>
+                    </div>
+                    <div class="calibration-bar">
+                        <div class="calibration-progress" id="calibration-bar" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="control-section">
+                <h3>Detected Command</h3>
+                <div class="command-display" id="command-display">
+                    <div class="command-icon" id="command-icon">--</div>
+                    <div class="command-text" id="command-text">WAITING</div>
+                    <div class="command-confidence" id="command-confidence">--</div>
+                    <div class="cooldown-bar">
+                        <div class="cooldown-progress" id="cooldown-bar" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="control-section">
+                <h3>Signal Features</h3>
+                <div class="feature-display">
+                    <div class="feature-card" id="fp1-card">
+                        <div class="feature-value" id="feature-fp1">--</div>
+                        <div class="feature-label">FP1 (uV)</div>
+                    </div>
+                    <div class="feature-card" id="fp2-card">
+                        <div class="feature-value" id="feature-fp2">--</div>
+                        <div class="feature-label">FP2 (uV)</div>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-value" id="feature-jaw">--</div>
+                        <div class="feature-label">Jaw Power</div>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-value" id="feature-quality">--</div>
+                        <div class="feature-label">Quality</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="control-section">
+                <h3>Command Stats</h3>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value" id="stat-commands">0</div>
+                        <div class="stat-label">Total Cmds</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="stat-last-cmd">--</div>
+                        <div class="stat-label">Last Cmd</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="control-section">
+                <h3>Command History</h3>
+                <div class="command-history" id="command-history">
+                    <div style="color: #666; font-size: 0.8rem; text-align: center; padding: 1rem;">
+                        No commands yet
+                    </div>
+                </div>
+            </div>
+        </aside>
     </div>
 
     <script>
@@ -511,14 +677,21 @@
             wsUrl: `ws://${window.location.host}/ws`,
             numChannels: 16,
             timeWindowSeconds: 5,
-            yScale: 100,  // microvolts
+            yScale: 100,
             channelColors: [
                 '#ff6b6b', '#ffa502', '#ffd43b', '#69db7c',
                 '#38d9a9', '#3bc9db', '#4dabf7', '#748ffc',
                 '#9775fa', '#da77f2', '#f783ac', '#ff8787',
                 '#74c0fc', '#63e6be', '#a9e34b', '#ffd93d'
             ],
-            channelSpacing: 150,  // vertical spacing between channels in plot units
+            channelSpacing: 150,
+            commandIcons: {
+                'forward': '&#x2191;',   // Up arrow
+                'backward': '&#x2193;',  // Down arrow
+                'left': '&#x2190;',      // Left arrow
+                'right': '&#x2192;',     // Right arrow
+                'null': '--'
+            }
         };
 
         // =====================================================================
@@ -528,14 +701,14 @@
         let ws = null;
         let isConnected = false;
         let isStreaming = false;
+        let wheelchairEnabled = false;
         let csvRecording = false;
+        let commandHistory = [];
 
-        // Data buffers for each channel
         let dataBuffers = [];
         let timeBuffer = [];
-        const maxBufferSize = 125 * 30;  // 30 seconds at 125 Hz
+        const maxBufferSize = 125 * 30;
 
-        // Initialize buffers
         for (let i = 0; i < CONFIG.numChannels; i++) {
             dataBuffers.push([]);
         }
@@ -547,6 +720,8 @@
         const elements = {
             statusBadge: document.getElementById('status-badge'),
             statusText: document.getElementById('status-text'),
+            wheelchairBadge: document.getElementById('wheelchair-badge'),
+            wheelchairStatusText: document.getElementById('wheelchair-status-text'),
             portSelect: document.getElementById('port-select'),
             portInput: document.getElementById('port-input'),
             refreshPortsBtn: document.getElementById('refresh-ports'),
@@ -558,19 +733,33 @@
             statRate: document.getElementById('stat-rate'),
             statSamples: document.getElementById('stat-samples'),
             statDropped: document.getElementById('stat-dropped'),
-            statElapsed: document.getElementById('stat-elapsed'),
-            statEffective: document.getElementById('stat-effective'),
             timeWindow: document.getElementById('time-window'),
             timeWindowValue: document.getElementById('time-window-value'),
             yScale: document.getElementById('y-scale'),
             yScaleValue: document.getElementById('y-scale-value'),
-            csvFilename: document.getElementById('csv-filename'),
-            startCsvBtn: document.getElementById('start-csv-btn'),
-            stopCsvBtn: document.getElementById('stop-csv-btn'),
-            recordingIndicator: document.getElementById('recording-indicator'),
             logPanel: document.getElementById('log-panel'),
             autoscaleBtn: document.getElementById('autoscale-btn'),
             clearBtn: document.getElementById('clear-btn'),
+            // Wheelchair elements
+            wheelchairToggle: document.getElementById('wheelchair-toggle'),
+            calibrateBtn: document.getElementById('calibrate-btn'),
+            calibrationStatus: document.getElementById('calibration-status'),
+            calibrationPercent: document.getElementById('calibration-percent'),
+            calibrationBar: document.getElementById('calibration-bar'),
+            commandDisplay: document.getElementById('command-display'),
+            commandIcon: document.getElementById('command-icon'),
+            commandText: document.getElementById('command-text'),
+            commandConfidence: document.getElementById('command-confidence'),
+            cooldownBar: document.getElementById('cooldown-bar'),
+            featureFp1: document.getElementById('feature-fp1'),
+            featureFp2: document.getElementById('feature-fp2'),
+            featureJaw: document.getElementById('feature-jaw'),
+            featureQuality: document.getElementById('feature-quality'),
+            fp1Card: document.getElementById('fp1-card'),
+            fp2Card: document.getElementById('fp2-card'),
+            statCommands: document.getElementById('stat-commands'),
+            statLastCmd: document.getElementById('stat-last-cmd'),
+            commandHistoryEl: document.getElementById('command-history'),
         };
 
         // =====================================================================
@@ -582,8 +771,6 @@
             entry.className = `log-entry ${type}`;
             entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
             elements.logPanel.insertBefore(entry, elements.logPanel.firstChild);
-
-            // Keep only last 50 entries
             while (elements.logPanel.children.length > 50) {
                 elements.logPanel.removeChild(elements.logPanel.lastChild);
             }
@@ -595,18 +782,13 @@
 
         function initChart() {
             const traces = [];
-
             for (let i = 0; i < CONFIG.numChannels; i++) {
                 traces.push({
-                    x: [],
-                    y: [],
+                    x: [], y: [],
                     type: 'scattergl',
                     mode: 'lines',
                     name: `Ch ${i + 1}`,
-                    line: {
-                        color: CONFIG.channelColors[i],
-                        width: 1
-                    },
+                    line: { color: CONFIG.channelColors[i], width: 1 },
                     hoverinfo: 'none',
                 });
             }
@@ -634,12 +816,7 @@
                 hovermode: false,
             };
 
-            const config = {
-                responsive: true,
-                displayModeBar: false,
-            };
-
-            Plotly.newPlot('eeg-chart', traces, layout, config);
+            Plotly.newPlot('eeg-chart', traces, layout, { responsive: true, displayModeBar: false });
         }
 
         function updateChart() {
@@ -649,7 +826,6 @@
             const now = timeBuffer[timeBuffer.length - 1];
             const windowStart = now - CONFIG.timeWindowSeconds;
 
-            // Find the start index for the time window
             let startIdx = 0;
             for (let i = timeBuffer.length - 1; i >= 0; i--) {
                 if (timeBuffer[i] < windowStart) {
@@ -662,22 +838,15 @@
 
             for (let ch = 0; ch < CONFIG.numChannels; ch++) {
                 const data = dataBuffers[ch].slice(startIdx);
-                // Offset each channel vertically
                 const offset = ch * CONFIG.channelSpacing;
-                traces.push({
-                    x: times,
-                    y: data.map(v => v + offset),
-                });
+                traces.push({ x: times, y: data.map(v => v + offset) });
             }
 
             const xRange = [Math.max(0, times[times.length - 1] - CONFIG.timeWindowSeconds), times[times.length - 1]];
 
             Plotly.update('eeg-chart',
                 { x: traces.map(t => t.x), y: traces.map(t => t.y) },
-                {
-                    'xaxis.range': xRange,
-                    'yaxis.range': [-CONFIG.yScale, CONFIG.numChannels * CONFIG.channelSpacing + CONFIG.yScale],
-                }
+                { 'xaxis.range': xRange, 'yaxis.range': [-CONFIG.yScale, CONFIG.numChannels * CONFIG.channelSpacing + CONFIG.yScale] }
             );
         }
 
@@ -687,17 +856,75 @@
             for (let i = 0; i < CONFIG.numChannels; i++) {
                 dataBuffers.push([]);
             }
+            Plotly.update('eeg-chart', { x: Array(CONFIG.numChannels).fill([]), y: Array(CONFIG.numChannels).fill([]) });
+            log('Chart cleared', 'info');
+        }
 
-            const emptyTraces = [];
-            for (let i = 0; i < CONFIG.numChannels; i++) {
-                emptyTraces.push({ x: [[]], y: [[]] });
+        // =====================================================================
+        // Wheelchair Control UI
+        // =====================================================================
+
+        function updateCommandDisplay(wheelchair) {
+            if (!wheelchair) return;
+
+            const cmd = wheelchair.command;
+            const confidence = wheelchair.confidence || 0;
+            const features = wheelchair.features || {};
+            const cooldown = wheelchair.cooldown || 0;
+
+            // Update command display
+            elements.commandDisplay.className = 'command-display' + (cmd ? ` active ${cmd}` : '');
+            elements.commandIcon.innerHTML = CONFIG.commandIcons[cmd] || '--';
+            elements.commandText.textContent = cmd ? cmd.toUpperCase() : 'WAITING';
+            elements.commandConfidence.textContent = cmd ? `Confidence: ${(confidence * 100).toFixed(0)}%` : '--';
+
+            // Update cooldown bar
+            const cooldownPercent = Math.min(100, (cooldown / 1.0) * 100);
+            elements.cooldownBar.style.width = `${cooldownPercent}%`;
+
+            // Update features
+            elements.featureFp1.textContent = features.fp1_max ? features.fp1_max.toFixed(1) : '--';
+            elements.featureFp2.textContent = features.fp2_max ? features.fp2_max.toFixed(1) : '--';
+            elements.featureJaw.textContent = features.jaw_power ? features.jaw_power.toFixed(0) : '--';
+            elements.featureQuality.textContent = features.signal_quality ? `${(features.signal_quality * 100).toFixed(0)}%` : '--';
+
+            // Highlight FP1/FP2 based on ratio
+            elements.fp1Card.classList.toggle('highlight', features.fp1_fp2_ratio > 1.3);
+            elements.fp2Card.classList.toggle('highlight', features.fp2_fp1_ratio > 1.3);
+
+            // Update stats
+            elements.statCommands.textContent = wheelchair.total_commands || 0;
+            elements.statLastCmd.textContent = wheelchair.last_command ? wheelchair.last_command.toUpperCase() : '--';
+
+            // Add to history if new command
+            if (cmd && (commandHistory.length === 0 || commandHistory[0].command !== cmd || Date.now() - commandHistory[0].time > 1500)) {
+                commandHistory.unshift({ command: cmd, confidence, time: Date.now() });
+                if (commandHistory.length > 20) commandHistory.pop();
+                updateCommandHistory();
+                log(`Command: ${cmd.toUpperCase()} (${(confidence * 100).toFixed(0)}%)`, 'command');
+            }
+        }
+
+        function updateCommandHistory() {
+            if (commandHistory.length === 0) {
+                elements.commandHistoryEl.innerHTML = '<div style="color: #666; font-size: 0.8rem; text-align: center; padding: 1rem;">No commands yet</div>';
+                return;
             }
 
-            Plotly.update('eeg-chart',
-                { x: emptyTraces.map(() => []), y: emptyTraces.map(() => []) }
-            );
+            elements.commandHistoryEl.innerHTML = commandHistory.map(item => `
+                <div class="history-item">
+                    <span class="history-command ${item.command}">${item.command.toUpperCase()}</span>
+                    <span class="history-confidence">${(item.confidence * 100).toFixed(0)}%</span>
+                </div>
+            `).join('');
+        }
 
-            log('Chart cleared', 'info');
+        function updateWheelchairUI() {
+            elements.wheelchairBadge.style.display = isConnected ? 'flex' : 'none';
+            elements.wheelchairBadge.className = 'status-badge ' + (wheelchairEnabled ? 'wheelchair-active' : 'disconnected');
+            elements.wheelchairStatusText.textContent = wheelchairEnabled ? 'Wheelchair Active' : 'Wheelchair Off';
+            elements.wheelchairToggle.checked = wheelchairEnabled;
+            elements.calibrateBtn.disabled = !isStreaming;
         }
 
         // =====================================================================
@@ -719,9 +946,7 @@
                 setTimeout(connectWebSocket, 2000);
             };
 
-            ws.onerror = (error) => {
-                log('WebSocket error', 'error');
-            };
+            ws.onerror = () => log('WebSocket error', 'error');
 
             ws.onmessage = (event) => {
                 const msg = JSON.parse(event.data);
@@ -733,19 +958,11 @@
             switch (msg.type) {
                 case 'state':
                     updateUIState(msg.is_connected, msg.is_streaming);
-                    if (msg.sampling_rate) {
-                        elements.statRate.textContent = `${msg.sampling_rate} Hz`;
-                    }
-                    if (msg.num_channels) {
-                        elements.statChannels.textContent = msg.num_channels;
-                    }
-                    if (msg.ports) {
-                        updatePortList(msg.ports);
-                    }
-                    if (msg.csv_enabled) {
-                        csvRecording = true;
-                        updateCSVUI();
-                    }
+                    wheelchairEnabled = msg.wheelchair_enabled || false;
+                    updateWheelchairUI();
+                    if (msg.sampling_rate) elements.statRate.textContent = `${msg.sampling_rate} Hz`;
+                    if (msg.num_channels) elements.statChannels.textContent = msg.num_channels;
+                    if (msg.ports) updatePortList(msg.ports);
                     break;
 
                 case 'ports':
@@ -755,9 +972,9 @@
                 case 'connect_result':
                     if (msg.success) {
                         log(`Connected to ${elements.portInput.value || elements.portSelect.value}`, 'success');
-                        log(`Channels: ${msg.num_channels}, Sample Rate: ${msg.sampling_rate} Hz`, 'info');
                         elements.statChannels.textContent = msg.num_channels;
                         elements.statRate.textContent = `${msg.sampling_rate} Hz`;
+                        if (msg.has_calibration) log('Calibration loaded', 'info');
                         updateUIState(true, false);
                     } else {
                         log(`Connection failed: ${msg.error}`, 'error');
@@ -768,8 +985,6 @@
                     if (msg.success) {
                         log('Disconnected', 'info');
                         updateUIState(false, false);
-                    } else {
-                        log(`Disconnect failed: ${msg.error}`, 'error');
                     }
                     break;
 
@@ -778,36 +993,45 @@
                         log('Streaming started', 'success');
                         updateUIState(true, true);
                         clearChart();
-                    } else {
-                        log(`Start failed: ${msg.error}`, 'error');
+                        commandHistory = [];
+                        updateCommandHistory();
                     }
                     break;
 
                 case 'stop_result':
                     if (msg.success) {
-                        log(`Streaming stopped. Total samples: ${msg.total_samples}`, 'info');
+                        log(`Streaming stopped. Samples: ${msg.total_samples}`, 'info');
                         updateUIState(true, false);
-                    } else {
-                        log(`Stop failed: ${msg.error}`, 'error');
                     }
                     break;
 
                 case 'data':
                     processEEGData(msg);
+                    if (msg.wheelchair) {
+                        updateCommandDisplay(msg.wheelchair);
+                    }
                     break;
 
-                case 'csv_result':
-                    if (msg.success) {
-                        if (msg.filename && !csvRecording) {
-                            csvRecording = true;
-                            log(`Recording to ${msg.filename}`, 'success');
-                        } else if (msg.filename && csvRecording) {
-                            csvRecording = false;
-                            log(`Recording saved to ${msg.filename}`, 'success');
-                        }
-                        updateCSVUI();
-                    } else {
-                        log(`CSV error: ${msg.error}`, 'error');
+                case 'wheelchair_status':
+                    wheelchairEnabled = msg.enabled;
+                    updateWheelchairUI();
+                    log(`Wheelchair ${msg.enabled ? 'enabled' : 'disabled'}`, msg.enabled ? 'success' : 'info');
+                    break;
+
+                case 'calibration_started':
+                    elements.calibrationStatus.style.display = 'block';
+                    elements.calibrateBtn.disabled = true;
+                    log('Calibration started...', 'info');
+                    break;
+
+                case 'calibration_progress':
+                    const percent = Math.round(msg.progress * 100);
+                    elements.calibrationPercent.textContent = `${percent}%`;
+                    elements.calibrationBar.style.width = `${percent}%`;
+                    if (msg.progress >= 1) {
+                        elements.calibrationStatus.style.display = 'none';
+                        elements.calibrateBtn.disabled = false;
+                        log('Calibration complete!', 'success');
                     }
                     break;
 
@@ -819,39 +1043,21 @@
 
         function processEEGData(msg) {
             const { eeg, timestamps, stats } = msg;
-
             if (!eeg || eeg.length === 0) return;
 
-            // Add data to buffers
             for (let ch = 0; ch < eeg.length && ch < CONFIG.numChannels; ch++) {
                 dataBuffers[ch].push(...eeg[ch]);
-
-                // Trim buffer if too large
-                while (dataBuffers[ch].length > maxBufferSize) {
-                    dataBuffers[ch].shift();
-                }
+                while (dataBuffers[ch].length > maxBufferSize) dataBuffers[ch].shift();
             }
 
-            // Add timestamps
             timeBuffer.push(...timestamps);
-            while (timeBuffer.length > maxBufferSize) {
-                timeBuffer.shift();
-            }
+            while (timeBuffer.length > maxBufferSize) timeBuffer.shift();
 
-            // Update stats
             if (stats) {
                 elements.statSamples.textContent = stats.total_samples.toLocaleString();
                 elements.statDropped.textContent = stats.dropped_packets;
-
-                const elapsed = Math.floor(stats.elapsed_seconds);
-                const mins = Math.floor(elapsed / 60);
-                const secs = elapsed % 60;
-                elements.statElapsed.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
-
-                elements.statEffective.textContent = `${stats.effective_rate.toFixed(1)} Hz`;
             }
 
-            // Update chart
             updateChart();
         }
 
@@ -863,18 +1069,15 @@
             isConnected = connected;
             isStreaming = streaming;
 
-            // Status badge
-            elements.statusBadge.className = 'status-badge ' +
-                (streaming ? 'streaming' : (connected ? 'connected' : 'disconnected'));
-            elements.statusText.textContent =
-                streaming ? 'Streaming' : (connected ? 'Connected' : 'Disconnected');
+            elements.statusBadge.className = 'status-badge ' + (streaming ? 'streaming' : (connected ? 'connected' : 'disconnected'));
+            elements.statusText.textContent = streaming ? 'Streaming' : (connected ? 'Connected' : 'Disconnected');
 
-            // Buttons
             elements.connectBtn.disabled = connected;
             elements.disconnectBtn.disabled = !connected;
             elements.startBtn.disabled = !connected || streaming;
             elements.stopBtn.disabled = !streaming;
-            elements.startCsvBtn.disabled = !connected || csvRecording;
+
+            updateWheelchairUI();
         }
 
         function updatePortList(ports) {
@@ -885,55 +1088,26 @@
                 option.textContent = port;
                 elements.portSelect.appendChild(option);
             });
-
-            if (ports.length > 0) {
-                log(`Found ${ports.length} serial port(s)`, 'info');
-            } else {
-                log('No serial ports found. Is the dongle connected?', 'error');
-            }
-        }
-
-        function updateCSVUI() {
-            elements.startCsvBtn.style.display = csvRecording ? 'none' : 'block';
-            elements.stopCsvBtn.style.display = csvRecording ? 'block' : 'none';
-            elements.recordingIndicator.style.display = csvRecording ? 'flex' : 'none';
-            elements.startCsvBtn.disabled = !isConnected || csvRecording;
-            elements.stopCsvBtn.disabled = !csvRecording;
+            log(ports.length > 0 ? `Found ${ports.length} port(s)` : 'No ports found', ports.length > 0 ? 'info' : 'error');
         }
 
         // =====================================================================
         // Event Handlers
         // =====================================================================
 
-        elements.refreshPortsBtn.onclick = () => {
-            ws.send(JSON.stringify({ command: 'detect_ports' }));
-        };
+        elements.refreshPortsBtn.onclick = () => ws.send(JSON.stringify({ command: 'detect_ports' }));
 
         elements.connectBtn.onclick = () => {
             const port = elements.portInput.value || elements.portSelect.value;
-            if (!port) {
-                log('Please select or enter a serial port', 'error');
-                return;
-            }
+            if (!port) { log('Please select a port', 'error'); return; }
             log(`Connecting to ${port}...`, 'info');
-            ws.send(JSON.stringify({ command: 'connect', port: port }));
+            ws.send(JSON.stringify({ command: 'connect', port }));
         };
 
-        elements.disconnectBtn.onclick = () => {
-            ws.send(JSON.stringify({ command: 'disconnect' }));
-        };
-
-        elements.startBtn.onclick = () => {
-            ws.send(JSON.stringify({ command: 'start' }));
-        };
-
-        elements.stopBtn.onclick = () => {
-            ws.send(JSON.stringify({ command: 'stop' }));
-        };
-
-        elements.portSelect.onchange = () => {
-            elements.portInput.value = elements.portSelect.value;
-        };
+        elements.disconnectBtn.onclick = () => ws.send(JSON.stringify({ command: 'disconnect' }));
+        elements.startBtn.onclick = () => ws.send(JSON.stringify({ command: 'start' }));
+        elements.stopBtn.onclick = () => ws.send(JSON.stringify({ command: 'stop' }));
+        elements.portSelect.onchange = () => elements.portInput.value = elements.portSelect.value;
 
         elements.timeWindow.oninput = () => {
             CONFIG.timeWindowSeconds = parseInt(elements.timeWindow.value);
@@ -945,23 +1119,20 @@
             elements.yScaleValue.textContent = CONFIG.yScale;
         };
 
-        elements.startCsvBtn.onclick = () => {
-            const filename = elements.csvFilename.value || `eeg_recording_${Date.now()}.csv`;
-            ws.send(JSON.stringify({ command: 'start_csv', filename: filename }));
-        };
-
-        elements.stopCsvBtn.onclick = () => {
-            ws.send(JSON.stringify({ command: 'stop_csv' }));
-        };
-
-        elements.autoscaleBtn.onclick = () => {
-            Plotly.relayout('eeg-chart', {
-                'yaxis.autorange': true,
-                'xaxis.autorange': true,
-            });
-        };
-
+        elements.autoscaleBtn.onclick = () => Plotly.relayout('eeg-chart', { 'yaxis.autorange': true, 'xaxis.autorange': true });
         elements.clearBtn.onclick = clearChart;
+
+        // Wheelchair controls
+        elements.wheelchairToggle.onchange = () => {
+            const enabled = elements.wheelchairToggle.checked;
+            ws.send(JSON.stringify({ command: enabled ? 'wheelchair_enable' : 'wheelchair_disable' }));
+        };
+
+        elements.calibrateBtn.onclick = () => {
+            if (isStreaming) {
+                ws.send(JSON.stringify({ command: 'calibrate' }));
+            }
+        };
 
         // =====================================================================
         // Initialization
@@ -970,9 +1141,9 @@
         initChart();
         connectWebSocket();
 
-        // Handle page unload
         window.addEventListener('beforeunload', () => {
             if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ command: 'wheelchair_disable' }));
                 ws.send(JSON.stringify({ command: 'stop' }));
                 ws.send(JSON.stringify({ command: 'disconnect' }));
             }
