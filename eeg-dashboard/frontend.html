@@ -1,0 +1,982 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenBCI Cyton + Daisy EEG Dashboard</title>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: #0a0a0f;
+            color: #e0e0e0;
+            min-height: 100vh;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            padding: 1rem 2rem;
+            border-bottom: 1px solid #2a2a4a;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #00d4ff;
+        }
+
+        .header .subtitle {
+            font-size: 0.85rem;
+            color: #888;
+            margin-top: 0.25rem;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            border-radius: 2rem;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        .status-badge.disconnected {
+            background: rgba(255, 71, 87, 0.2);
+            color: #ff4757;
+        }
+
+        .status-badge.connected {
+            background: rgba(46, 213, 115, 0.2);
+            color: #2ed573;
+        }
+
+        .status-badge.streaming {
+            background: rgba(0, 212, 255, 0.2);
+            color: #00d4ff;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: currentColor;
+        }
+
+        .main-container {
+            display: grid;
+            grid-template-columns: 280px 1fr;
+            gap: 1rem;
+            padding: 1rem;
+            height: calc(100vh - 80px);
+        }
+
+        .control-panel {
+            background: #12121a;
+            border-radius: 12px;
+            padding: 1.25rem;
+            border: 1px solid #2a2a4a;
+            overflow-y: auto;
+        }
+
+        .control-section {
+            margin-bottom: 1.5rem;
+        }
+
+        .control-section h3 {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: #666;
+            margin-bottom: 0.75rem;
+        }
+
+        .port-select {
+            width: 100%;
+            padding: 0.75rem;
+            background: #1a1a2e;
+            border: 1px solid #2a2a4a;
+            border-radius: 8px;
+            color: #e0e0e0;
+            font-size: 0.9rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .port-input {
+            width: 100%;
+            padding: 0.75rem;
+            background: #1a1a2e;
+            border: 1px solid #2a2a4a;
+            border-radius: 8px;
+            color: #e0e0e0;
+            font-size: 0.9rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .port-input::placeholder {
+            color: #555;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-bottom: 0.5rem;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #00d4ff 0%, #0099cc 100%);
+            color: #000;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 15px rgba(0, 212, 255, 0.3);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #ff4757 0%, #cc0022 100%);
+            color: #fff;
+        }
+
+        .btn-danger:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 15px rgba(255, 71, 87, 0.3);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #2ed573 0%, #00b341 100%);
+            color: #000;
+        }
+
+        .btn-success:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 15px rgba(46, 213, 115, 0.3);
+        }
+
+        .btn-secondary {
+            background: #2a2a4a;
+            color: #e0e0e0;
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            background: #3a3a5a;
+        }
+
+        .btn-small {
+            padding: 0.5rem 0.75rem;
+            font-size: 0.8rem;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.75rem;
+        }
+
+        .stat-card {
+            background: #1a1a2e;
+            border-radius: 8px;
+            padding: 0.75rem;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #00d4ff;
+        }
+
+        .stat-label {
+            font-size: 0.7rem;
+            color: #666;
+            text-transform: uppercase;
+            margin-top: 0.25rem;
+        }
+
+        .csv-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .csv-filename {
+            padding: 0.6rem;
+            background: #1a1a2e;
+            border: 1px solid #2a2a4a;
+            border-radius: 6px;
+            color: #e0e0e0;
+            font-size: 0.85rem;
+        }
+
+        .recording-indicator {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: #ff4757;
+            font-size: 0.85rem;
+            animation: pulse 1s infinite;
+        }
+
+        .recording-dot {
+            width: 8px;
+            height: 8px;
+            background: #ff4757;
+            border-radius: 50%;
+        }
+
+        .chart-container {
+            background: #12121a;
+            border-radius: 12px;
+            padding: 1rem;
+            border: 1px solid #2a2a4a;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .chart-header h2 {
+            font-size: 1rem;
+            font-weight: 500;
+        }
+
+        .chart-controls {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        #eeg-chart {
+            flex: 1;
+            min-height: 0;
+        }
+
+        .channel-label {
+            position: absolute;
+            left: 5px;
+            font-size: 0.7rem;
+            color: #888;
+        }
+
+        .log-panel {
+            margin-top: 0.5rem;
+            padding: 0.5rem;
+            background: #0a0a0f;
+            border-radius: 6px;
+            max-height: 100px;
+            overflow-y: auto;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 0.75rem;
+        }
+
+        .log-entry {
+            padding: 0.25rem 0;
+            border-bottom: 1px solid #1a1a2e;
+        }
+
+        .log-entry.error {
+            color: #ff4757;
+        }
+
+        .log-entry.success {
+            color: #2ed573;
+        }
+
+        .log-entry.info {
+            color: #00d4ff;
+        }
+
+        .toggle-group {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .toggle-btn {
+            flex: 1;
+            padding: 0.5rem;
+            background: #1a1a2e;
+            border: 1px solid #2a2a4a;
+            border-radius: 6px;
+            color: #888;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .toggle-btn.active {
+            background: #00d4ff;
+            color: #000;
+            border-color: #00d4ff;
+        }
+
+        .time-window-slider {
+            width: 100%;
+            margin: 0.5rem 0;
+        }
+
+        .slider-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            color: #666;
+        }
+
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #1a1a2e;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #3a3a5a;
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #4a4a6a;
+        }
+
+        @media (max-width: 1200px) {
+            .main-container {
+                grid-template-columns: 1fr;
+                grid-template-rows: auto 1fr;
+            }
+
+            .control-panel {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                gap: 1rem;
+            }
+
+            .control-section {
+                margin-bottom: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div>
+            <h1>OpenBCI EEG Dashboard</h1>
+            <div class="subtitle">Cyton + Daisy | 16 Channels | BrainFlow</div>
+        </div>
+        <div id="status-badge" class="status-badge disconnected">
+            <span class="status-dot"></span>
+            <span id="status-text">Disconnected</span>
+        </div>
+    </header>
+
+    <div class="main-container">
+        <aside class="control-panel">
+            <!-- Connection Section -->
+            <div class="control-section">
+                <h3>Connection</h3>
+                <select id="port-select" class="port-select">
+                    <option value="">Select serial port...</option>
+                </select>
+                <input type="text" id="port-input" class="port-input" placeholder="Or enter port manually...">
+                <button id="refresh-ports" class="btn btn-secondary btn-small">Refresh Ports</button>
+                <button id="connect-btn" class="btn btn-primary">Connect</button>
+                <button id="disconnect-btn" class="btn btn-danger" disabled>Disconnect</button>
+            </div>
+
+            <!-- Streaming Section -->
+            <div class="control-section">
+                <h3>Streaming</h3>
+                <button id="start-btn" class="btn btn-success" disabled>Start Streaming</button>
+                <button id="stop-btn" class="btn btn-danger" disabled>Stop Streaming</button>
+            </div>
+
+            <!-- Statistics Section -->
+            <div class="control-section">
+                <h3>Statistics</h3>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value" id="stat-channels">--</div>
+                        <div class="stat-label">Channels</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="stat-rate">--</div>
+                        <div class="stat-label">Sample Rate</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="stat-samples">0</div>
+                        <div class="stat-label">Samples</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="stat-dropped">0</div>
+                        <div class="stat-label">Dropped</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="stat-elapsed">0:00</div>
+                        <div class="stat-label">Elapsed</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="stat-effective">--</div>
+                        <div class="stat-label">Eff. Rate</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Display Settings -->
+            <div class="control-section">
+                <h3>Display Settings</h3>
+                <div class="slider-label">
+                    <span>Time Window</span>
+                    <span id="time-window-value">5s</span>
+                </div>
+                <input type="range" id="time-window" class="time-window-slider" min="1" max="30" value="5">
+
+                <div class="slider-label" style="margin-top: 0.75rem;">
+                    <span>Y-Scale (uV)</span>
+                    <span id="y-scale-value">100</span>
+                </div>
+                <input type="range" id="y-scale" class="time-window-slider" min="25" max="500" value="100" step="25">
+            </div>
+
+            <!-- CSV Recording Section -->
+            <div class="control-section">
+                <h3>CSV Recording</h3>
+                <div class="csv-controls">
+                    <input type="text" id="csv-filename" class="csv-filename" placeholder="recording.csv">
+                    <button id="start-csv-btn" class="btn btn-secondary" disabled>Start Recording</button>
+                    <button id="stop-csv-btn" class="btn btn-danger" disabled style="display: none;">Stop Recording</button>
+                    <div id="recording-indicator" class="recording-indicator" style="display: none;">
+                        <span class="recording-dot"></span>
+                        <span>Recording...</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Log Section -->
+            <div class="control-section">
+                <h3>Log</h3>
+                <div id="log-panel" class="log-panel"></div>
+            </div>
+        </aside>
+
+        <main class="chart-container">
+            <div class="chart-header">
+                <h2>EEG Channels (1-16)</h2>
+                <div class="chart-controls">
+                    <button id="autoscale-btn" class="btn btn-secondary btn-small">Autoscale</button>
+                    <button id="clear-btn" class="btn btn-secondary btn-small">Clear</button>
+                </div>
+            </div>
+            <div id="eeg-chart"></div>
+        </main>
+    </div>
+
+    <script>
+        // =====================================================================
+        // Configuration
+        // =====================================================================
+
+        const CONFIG = {
+            wsUrl: `ws://${window.location.host}/ws`,
+            numChannels: 16,
+            timeWindowSeconds: 5,
+            yScale: 100,  // microvolts
+            channelColors: [
+                '#ff6b6b', '#ffa502', '#ffd43b', '#69db7c',
+                '#38d9a9', '#3bc9db', '#4dabf7', '#748ffc',
+                '#9775fa', '#da77f2', '#f783ac', '#ff8787',
+                '#74c0fc', '#63e6be', '#a9e34b', '#ffd93d'
+            ],
+            channelSpacing: 150,  // vertical spacing between channels in plot units
+        };
+
+        // =====================================================================
+        // State
+        // =====================================================================
+
+        let ws = null;
+        let isConnected = false;
+        let isStreaming = false;
+        let csvRecording = false;
+
+        // Data buffers for each channel
+        let dataBuffers = [];
+        let timeBuffer = [];
+        const maxBufferSize = 125 * 30;  // 30 seconds at 125 Hz
+
+        // Initialize buffers
+        for (let i = 0; i < CONFIG.numChannels; i++) {
+            dataBuffers.push([]);
+        }
+
+        // =====================================================================
+        // DOM Elements
+        // =====================================================================
+
+        const elements = {
+            statusBadge: document.getElementById('status-badge'),
+            statusText: document.getElementById('status-text'),
+            portSelect: document.getElementById('port-select'),
+            portInput: document.getElementById('port-input'),
+            refreshPortsBtn: document.getElementById('refresh-ports'),
+            connectBtn: document.getElementById('connect-btn'),
+            disconnectBtn: document.getElementById('disconnect-btn'),
+            startBtn: document.getElementById('start-btn'),
+            stopBtn: document.getElementById('stop-btn'),
+            statChannels: document.getElementById('stat-channels'),
+            statRate: document.getElementById('stat-rate'),
+            statSamples: document.getElementById('stat-samples'),
+            statDropped: document.getElementById('stat-dropped'),
+            statElapsed: document.getElementById('stat-elapsed'),
+            statEffective: document.getElementById('stat-effective'),
+            timeWindow: document.getElementById('time-window'),
+            timeWindowValue: document.getElementById('time-window-value'),
+            yScale: document.getElementById('y-scale'),
+            yScaleValue: document.getElementById('y-scale-value'),
+            csvFilename: document.getElementById('csv-filename'),
+            startCsvBtn: document.getElementById('start-csv-btn'),
+            stopCsvBtn: document.getElementById('stop-csv-btn'),
+            recordingIndicator: document.getElementById('recording-indicator'),
+            logPanel: document.getElementById('log-panel'),
+            autoscaleBtn: document.getElementById('autoscale-btn'),
+            clearBtn: document.getElementById('clear-btn'),
+        };
+
+        // =====================================================================
+        // Logging
+        // =====================================================================
+
+        function log(message, type = 'info') {
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            elements.logPanel.insertBefore(entry, elements.logPanel.firstChild);
+
+            // Keep only last 50 entries
+            while (elements.logPanel.children.length > 50) {
+                elements.logPanel.removeChild(elements.logPanel.lastChild);
+            }
+        }
+
+        // =====================================================================
+        // Chart Setup
+        // =====================================================================
+
+        function initChart() {
+            const traces = [];
+
+            for (let i = 0; i < CONFIG.numChannels; i++) {
+                traces.push({
+                    x: [],
+                    y: [],
+                    type: 'scattergl',
+                    mode: 'lines',
+                    name: `Ch ${i + 1}`,
+                    line: {
+                        color: CONFIG.channelColors[i],
+                        width: 1
+                    },
+                    hoverinfo: 'none',
+                });
+            }
+
+            const layout = {
+                paper_bgcolor: '#12121a',
+                plot_bgcolor: '#12121a',
+                margin: { l: 60, r: 20, t: 10, b: 40 },
+                xaxis: {
+                    title: 'Time (s)',
+                    color: '#666',
+                    gridcolor: '#2a2a4a',
+                    range: [0, CONFIG.timeWindowSeconds],
+                    dtick: 1,
+                },
+                yaxis: {
+                    title: 'Channels (uV)',
+                    color: '#666',
+                    gridcolor: '#2a2a4a',
+                    range: [-CONFIG.yScale, CONFIG.numChannels * CONFIG.channelSpacing + CONFIG.yScale],
+                    tickvals: Array.from({length: CONFIG.numChannels}, (_, i) => i * CONFIG.channelSpacing),
+                    ticktext: Array.from({length: CONFIG.numChannels}, (_, i) => `Ch ${i + 1}`),
+                },
+                showlegend: false,
+                hovermode: false,
+            };
+
+            const config = {
+                responsive: true,
+                displayModeBar: false,
+            };
+
+            Plotly.newPlot('eeg-chart', traces, layout, config);
+        }
+
+        function updateChart() {
+            if (timeBuffer.length === 0) return;
+
+            const traces = [];
+            const now = timeBuffer[timeBuffer.length - 1];
+            const windowStart = now - CONFIG.timeWindowSeconds;
+
+            // Find the start index for the time window
+            let startIdx = 0;
+            for (let i = timeBuffer.length - 1; i >= 0; i--) {
+                if (timeBuffer[i] < windowStart) {
+                    startIdx = i + 1;
+                    break;
+                }
+            }
+
+            const times = timeBuffer.slice(startIdx).map(t => t - timeBuffer[0]);
+
+            for (let ch = 0; ch < CONFIG.numChannels; ch++) {
+                const data = dataBuffers[ch].slice(startIdx);
+                // Offset each channel vertically
+                const offset = ch * CONFIG.channelSpacing;
+                traces.push({
+                    x: times,
+                    y: data.map(v => v + offset),
+                });
+            }
+
+            const xRange = [Math.max(0, times[times.length - 1] - CONFIG.timeWindowSeconds), times[times.length - 1]];
+
+            Plotly.update('eeg-chart',
+                { x: traces.map(t => t.x), y: traces.map(t => t.y) },
+                {
+                    'xaxis.range': xRange,
+                    'yaxis.range': [-CONFIG.yScale, CONFIG.numChannels * CONFIG.channelSpacing + CONFIG.yScale],
+                }
+            );
+        }
+
+        function clearChart() {
+            dataBuffers = [];
+            timeBuffer = [];
+            for (let i = 0; i < CONFIG.numChannels; i++) {
+                dataBuffers.push([]);
+            }
+
+            const emptyTraces = [];
+            for (let i = 0; i < CONFIG.numChannels; i++) {
+                emptyTraces.push({ x: [[]], y: [[]] });
+            }
+
+            Plotly.update('eeg-chart',
+                { x: emptyTraces.map(() => []), y: emptyTraces.map(() => []) }
+            );
+
+            log('Chart cleared', 'info');
+        }
+
+        // =====================================================================
+        // WebSocket Connection
+        // =====================================================================
+
+        function connectWebSocket() {
+            ws = new WebSocket(CONFIG.wsUrl);
+
+            ws.onopen = () => {
+                log('WebSocket connected', 'success');
+                ws.send(JSON.stringify({ command: 'get_state' }));
+                ws.send(JSON.stringify({ command: 'detect_ports' }));
+            };
+
+            ws.onclose = () => {
+                log('WebSocket disconnected', 'error');
+                updateUIState(false, false);
+                setTimeout(connectWebSocket, 2000);
+            };
+
+            ws.onerror = (error) => {
+                log('WebSocket error', 'error');
+            };
+
+            ws.onmessage = (event) => {
+                const msg = JSON.parse(event.data);
+                handleMessage(msg);
+            };
+        }
+
+        function handleMessage(msg) {
+            switch (msg.type) {
+                case 'state':
+                    updateUIState(msg.is_connected, msg.is_streaming);
+                    if (msg.sampling_rate) {
+                        elements.statRate.textContent = `${msg.sampling_rate} Hz`;
+                    }
+                    if (msg.num_channels) {
+                        elements.statChannels.textContent = msg.num_channels;
+                    }
+                    if (msg.ports) {
+                        updatePortList(msg.ports);
+                    }
+                    if (msg.csv_enabled) {
+                        csvRecording = true;
+                        updateCSVUI();
+                    }
+                    break;
+
+                case 'ports':
+                    updatePortList(msg.ports);
+                    break;
+
+                case 'connect_result':
+                    if (msg.success) {
+                        log(`Connected to ${elements.portInput.value || elements.portSelect.value}`, 'success');
+                        log(`Channels: ${msg.num_channels}, Sample Rate: ${msg.sampling_rate} Hz`, 'info');
+                        elements.statChannels.textContent = msg.num_channels;
+                        elements.statRate.textContent = `${msg.sampling_rate} Hz`;
+                        updateUIState(true, false);
+                    } else {
+                        log(`Connection failed: ${msg.error}`, 'error');
+                    }
+                    break;
+
+                case 'disconnect_result':
+                    if (msg.success) {
+                        log('Disconnected', 'info');
+                        updateUIState(false, false);
+                    } else {
+                        log(`Disconnect failed: ${msg.error}`, 'error');
+                    }
+                    break;
+
+                case 'start_result':
+                    if (msg.success) {
+                        log('Streaming started', 'success');
+                        updateUIState(true, true);
+                        clearChart();
+                    } else {
+                        log(`Start failed: ${msg.error}`, 'error');
+                    }
+                    break;
+
+                case 'stop_result':
+                    if (msg.success) {
+                        log(`Streaming stopped. Total samples: ${msg.total_samples}`, 'info');
+                        updateUIState(true, false);
+                    } else {
+                        log(`Stop failed: ${msg.error}`, 'error');
+                    }
+                    break;
+
+                case 'data':
+                    processEEGData(msg);
+                    break;
+
+                case 'csv_result':
+                    if (msg.success) {
+                        if (msg.filename && !csvRecording) {
+                            csvRecording = true;
+                            log(`Recording to ${msg.filename}`, 'success');
+                        } else if (msg.filename && csvRecording) {
+                            csvRecording = false;
+                            log(`Recording saved to ${msg.filename}`, 'success');
+                        }
+                        updateCSVUI();
+                    } else {
+                        log(`CSV error: ${msg.error}`, 'error');
+                    }
+                    break;
+
+                case 'error':
+                    log(msg.error, 'error');
+                    break;
+            }
+        }
+
+        function processEEGData(msg) {
+            const { eeg, timestamps, stats } = msg;
+
+            if (!eeg || eeg.length === 0) return;
+
+            // Add data to buffers
+            for (let ch = 0; ch < eeg.length && ch < CONFIG.numChannels; ch++) {
+                dataBuffers[ch].push(...eeg[ch]);
+
+                // Trim buffer if too large
+                while (dataBuffers[ch].length > maxBufferSize) {
+                    dataBuffers[ch].shift();
+                }
+            }
+
+            // Add timestamps
+            timeBuffer.push(...timestamps);
+            while (timeBuffer.length > maxBufferSize) {
+                timeBuffer.shift();
+            }
+
+            // Update stats
+            if (stats) {
+                elements.statSamples.textContent = stats.total_samples.toLocaleString();
+                elements.statDropped.textContent = stats.dropped_packets;
+
+                const elapsed = Math.floor(stats.elapsed_seconds);
+                const mins = Math.floor(elapsed / 60);
+                const secs = elapsed % 60;
+                elements.statElapsed.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+
+                elements.statEffective.textContent = `${stats.effective_rate.toFixed(1)} Hz`;
+            }
+
+            // Update chart
+            updateChart();
+        }
+
+        // =====================================================================
+        // UI Updates
+        // =====================================================================
+
+        function updateUIState(connected, streaming) {
+            isConnected = connected;
+            isStreaming = streaming;
+
+            // Status badge
+            elements.statusBadge.className = 'status-badge ' +
+                (streaming ? 'streaming' : (connected ? 'connected' : 'disconnected'));
+            elements.statusText.textContent =
+                streaming ? 'Streaming' : (connected ? 'Connected' : 'Disconnected');
+
+            // Buttons
+            elements.connectBtn.disabled = connected;
+            elements.disconnectBtn.disabled = !connected;
+            elements.startBtn.disabled = !connected || streaming;
+            elements.stopBtn.disabled = !streaming;
+            elements.startCsvBtn.disabled = !connected || csvRecording;
+        }
+
+        function updatePortList(ports) {
+            elements.portSelect.innerHTML = '<option value="">Select serial port...</option>';
+            ports.forEach(port => {
+                const option = document.createElement('option');
+                option.value = port;
+                option.textContent = port;
+                elements.portSelect.appendChild(option);
+            });
+
+            if (ports.length > 0) {
+                log(`Found ${ports.length} serial port(s)`, 'info');
+            } else {
+                log('No serial ports found. Is the dongle connected?', 'error');
+            }
+        }
+
+        function updateCSVUI() {
+            elements.startCsvBtn.style.display = csvRecording ? 'none' : 'block';
+            elements.stopCsvBtn.style.display = csvRecording ? 'block' : 'none';
+            elements.recordingIndicator.style.display = csvRecording ? 'flex' : 'none';
+            elements.startCsvBtn.disabled = !isConnected || csvRecording;
+            elements.stopCsvBtn.disabled = !csvRecording;
+        }
+
+        // =====================================================================
+        // Event Handlers
+        // =====================================================================
+
+        elements.refreshPortsBtn.onclick = () => {
+            ws.send(JSON.stringify({ command: 'detect_ports' }));
+        };
+
+        elements.connectBtn.onclick = () => {
+            const port = elements.portInput.value || elements.portSelect.value;
+            if (!port) {
+                log('Please select or enter a serial port', 'error');
+                return;
+            }
+            log(`Connecting to ${port}...`, 'info');
+            ws.send(JSON.stringify({ command: 'connect', port: port }));
+        };
+
+        elements.disconnectBtn.onclick = () => {
+            ws.send(JSON.stringify({ command: 'disconnect' }));
+        };
+
+        elements.startBtn.onclick = () => {
+            ws.send(JSON.stringify({ command: 'start' }));
+        };
+
+        elements.stopBtn.onclick = () => {
+            ws.send(JSON.stringify({ command: 'stop' }));
+        };
+
+        elements.portSelect.onchange = () => {
+            elements.portInput.value = elements.portSelect.value;
+        };
+
+        elements.timeWindow.oninput = () => {
+            CONFIG.timeWindowSeconds = parseInt(elements.timeWindow.value);
+            elements.timeWindowValue.textContent = `${CONFIG.timeWindowSeconds}s`;
+        };
+
+        elements.yScale.oninput = () => {
+            CONFIG.yScale = parseInt(elements.yScale.value);
+            elements.yScaleValue.textContent = CONFIG.yScale;
+        };
+
+        elements.startCsvBtn.onclick = () => {
+            const filename = elements.csvFilename.value || `eeg_recording_${Date.now()}.csv`;
+            ws.send(JSON.stringify({ command: 'start_csv', filename: filename }));
+        };
+
+        elements.stopCsvBtn.onclick = () => {
+            ws.send(JSON.stringify({ command: 'stop_csv' }));
+        };
+
+        elements.autoscaleBtn.onclick = () => {
+            Plotly.relayout('eeg-chart', {
+                'yaxis.autorange': true,
+                'xaxis.autorange': true,
+            });
+        };
+
+        elements.clearBtn.onclick = clearChart;
+
+        // =====================================================================
+        // Initialization
+        // =====================================================================
+
+        initChart();
+        connectWebSocket();
+
+        // Handle page unload
+        window.addEventListener('beforeunload', () => {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ command: 'stop' }));
+                ws.send(JSON.stringify({ command: 'disconnect' }));
+            }
+        });
+    </script>
+</body>
+</html>
