@@ -13,8 +13,8 @@ All threshold values and timing parameters are documented with their rationale.
 # If using Daisy board (channels 9-16): FP1=9, FP2=10
 # If Daisy not working, use Cyton (channels 1-8): FP1=1, FP2=2
 #
-FP1_CHANNEL = 9   # Left frontal electrode (Daisy board)
-FP2_CHANNEL = 10  # Right frontal electrode (Daisy board)
+FP1_CHANNEL = 1   # Left frontal electrode (Cyton board)
+FP2_CHANNEL = 3   # Right frontal electrode (Cyton board)
 
 # Sampling rate for OpenBCI Cyton+Daisy
 SAMPLING_RATE = 125  # Hz
