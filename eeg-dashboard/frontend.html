@@ -713,8 +713,7 @@
                 <div class="chart-controls">
                     <label>Gain</label>
                     <select id="gain-select">
-                        <option value="auto" selected>Auto</option>
-                        <option value="1">1x</option>
+                        <option value="1" selected>1x (Raw)</option>
                         <option value="0.1">0.1x</option>
                         <option value="0.01">0.01x</option>
                         <option value="0.001">0.001x</option>
@@ -724,9 +723,16 @@
                     <select id="vert-scale">
                         <option value="50">50 uV</option>
                         <option value="100">100 uV</option>
-                        <option value="200" selected>200 uV</option>
-                        <option value="400">400 uV</option>
-                        <option value="1000">1000 uV</option>
+                        <option value="200">200 uV</option>
+                        <option value="500">500 uV</option>
+                        <option value="1000">1 mV</option>
+                        <option value="5000">5 mV</option>
+                        <option value="10000">10 mV</option>
+                        <option value="50000">50 mV</option>
+                        <option value="100000" selected>100 mV</option>
+                        <option value="200000">200 mV</option>
+                        <option value="500000">500 mV</option>
+                        <option value="1000000">1 V</option>
                     </select>
                     <label>Window</label>
                     <select id="time-window-select">
@@ -846,9 +852,8 @@
             wsUrl: `ws://${window.location.host}/ws`,
             numChannels: 16,
             timeWindowSeconds: 5,
-            vertScale: 200,  // uV scale for each channel (+/- this value)
-            gain: 0.001,     // Gain to scale down raw values (adjust based on actual data)
-            autoGain: true,  // Automatically calculate gain from data
+            vertScale: 100000,  // Scale for display (+/- this value in uV)
+            gain: 1,            // Gain multiplier for display (1 = raw values)
             channelColors: [
                 '#ff6b6b', '#ffa502', '#ffd43b', '#69db7c',
                 '#38d9a9', '#3bc9db', '#4dabf7', '#748ffc',
@@ -1378,23 +1383,6 @@
                 return;
             }
 
-            // Auto-gain calculation - only on first packet, then lock it in
-            if (CONFIG.autoGain && dataBuffers[0].length === 0 && eeg[0] && eeg[0].length > 0) {
-                // Check data range across all channels
-                const allValues = eeg.flat();
-                const absMax = Math.max(...allValues.map(Math.abs));
-
-                if (absMax > 0) {
-                    // Calculate gain to fit data in +/- vertScale range (80% headroom)
-                    const calculatedGain = (CONFIG.vertScale * 0.8) / absMax;
-                    CONFIG.gain = calculatedGain;
-                    CONFIG.autoGain = false;  // Lock it in - don't recalculate
-
-                    console.log(`Auto-gain set to ${calculatedGain.toExponential(2)} (raw max: ${absMax.toFixed(0)})`);
-                    log(`Gain locked: ${calculatedGain.toExponential(2)}`, 'success');
-                }
-            }
-
             // Apply gain and store data (simple loop, no .map for performance)
             for (let ch = 0; ch < eeg.length && ch < CONFIG.numChannels; ch++) {
                 const chData = eeg[ch];
@@ -1465,26 +1453,14 @@
         elements.portSelect.onchange = () => elements.portInput.value = elements.portSelect.value;
 
         elements.gainSelect.onchange = () => {
-            const val = elements.gainSelect.value;
-            if (val === 'auto') {
-                CONFIG.autoGain = true;
-                clearChart();  // Reset to trigger auto-gain on next data
-                log('Auto-gain will recalculate on next data', 'info');
-            } else {
-                CONFIG.autoGain = false;
-                CONFIG.gain = parseFloat(val);
-                log(`Gain set to ${val}x`, 'info');
-            }
+            CONFIG.gain = parseFloat(elements.gainSelect.value);
+            log(`Gain set to ${elements.gainSelect.value}x`, 'info');
         };
 
         elements.vertScaleSelect.onchange = () => {
             CONFIG.vertScale = parseInt(elements.vertScaleSelect.value);
             updateScaleLabels();
-            // Recalculate auto-gain if enabled
-            if (CONFIG.autoGain) {
-                clearChart();
-                log('Scale changed. Auto-gain will recalibrate.', 'info');
-            }
+            log(`Scale set to ${elements.vertScaleSelect.value} uV`, 'info');
         };
 
         elements.timeWindowSelect.onchange = () => {

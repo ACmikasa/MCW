@@ -349,7 +349,7 @@ def get_board_data() -> Optional[np.ndarray]:
                 dropped = np.sum(actual_diff > 1)
                 state.dropped_packets += int(dropped)
 
-            # Add to command detection buffer
+            # Add to command detection buffer (raw values, no scaling)
             # FP1 is at index 9, FP2 is at index 10 in the EEG channels
             # But eeg_channels gives us the actual row indices
             fp1_idx = state.eeg_channels[FP1_CHANNEL - 1]  # Channel 9 -> index 8 in list

@@ -76,13 +76,14 @@ class CommandDetector:
             }
         else:
             # Default thresholds (should be calibrated for each user)
+            # These work with raw values from OpenBCI
             return {
-                'blink_threshold': 50.0,      # uV for blink peaks
-                'jaw_threshold': 500.0,       # uV^2 for jaw power
-                'eye_move_threshold': 30.0,   # uV for eye movements
+                'blink_threshold': 50000.0,     # Raw amplitude for blink peaks
+                'jaw_threshold': 500000.0,      # Raw power for jaw clench
+                'eye_move_threshold': 30000.0,  # Raw amplitude for eye movements
                 'lateral_ratio': config.LATERAL_RATIO,
-                'baseline_amplitude': 20.0,
-                'baseline_jaw_power': 200.0,
+                'baseline_amplitude': 20000.0,
+                'baseline_jaw_power': 200000.0,
             }
 
     def update_thresholds(self, calibration_data: Dict):
