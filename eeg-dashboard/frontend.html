@@ -610,83 +610,15 @@
             color: #00d4ff;
         }
 
-        .calibration-log-entry.phase {
-            color: #ffd43b;
-            font-weight: bold;
-        }
-
-        .calibration-log-entry.trial {
-            color: #da77f2;
-        }
-
-        .calibration-log-entry.countdown {
-            color: #ffa502;
-            font-size: 0.85rem;
-            font-weight: bold;
-        }
-
-        .calibration-log-entry.action {
-            color: #2ed573;
-            font-size: 0.9rem;
-            font-weight: bold;
-        }
-
-        .calibration-phase-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 0.5rem;
-        }
-
-        .calibration-phase-header .phase-name {
-            font-size: 0.9rem;
-            font-weight: bold;
-            color: #ffd43b;
-            text-transform: uppercase;
-        }
-
-        .calibration-phase-header .phase-trial {
-            font-size: 0.8rem;
-            color: #da77f2;
-        }
-
         .calibration-instruction {
             background: linear-gradient(135deg, #1a1a2e 0%, #0a0a15 100%);
-            border: 2px solid #3a3a5a;
-            border-radius: 8px;
-            padding: 1rem;
+            border: 1px solid #3a3a5a;
+            border-radius: 6px;
+            padding: 0.75rem;
             text-align: center;
-            font-size: 1.1rem;
-            font-weight: bold;
-            color: #fff;
-            min-height: 60px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: all 0.3s ease;
-        }
-
-        .calibration-instruction.countdown {
-            border-color: #ffa502;
+            font-size: 0.85rem;
             color: #ffa502;
-            font-size: 1.5rem;
-        }
-
-        .calibration-instruction.action {
-            border-color: #2ed573;
-            color: #2ed573;
-            font-size: 1.3rem;
-            animation: pulse-border 0.5s ease-in-out infinite;
-        }
-
-        @keyframes pulse-border {
-            0%, 100% { border-color: #2ed573; box-shadow: 0 0 10px rgba(46, 213, 115, 0.3); }
-            50% { border-color: #7bed9f; box-shadow: 0 0 20px rgba(46, 213, 115, 0.6); }
-        }
-
-        .calibration-instruction.rest {
-            border-color: #00d4ff;
-            color: #00d4ff;
+            margin-bottom: 0.5rem;
         }
 
         /* Custom scrollbar */
@@ -847,17 +779,13 @@
                     <input type="checkbox" id="wheelchair-toggle">
                     <span class="slider"></span>
                 </label>
-                <button id="calibrate-btn" class="btn btn-warning" disabled>Calibrate (~2 min)</button>
+                <button id="calibrate-btn" class="btn btn-warning" disabled>Calibrate (10s)</button>
                 <div id="calibration-status" style="display: none;">
-                    <div class="calibration-phase-header" id="calibration-phase-header">
-                        <span class="phase-name" id="calibration-phase-name">BASELINE</span>
-                        <span class="phase-trial" id="calibration-trial-info"></span>
-                    </div>
                     <div class="calibration-instruction" id="calibration-instruction">
                         Sit still, look straight ahead, relax.
                     </div>
                     <div class="slider-label" style="margin-top: 0.5rem;">
-                        <span>Progress</span>
+                        <span>Recording baseline...</span>
                         <span id="calibration-percent">0%</span>
                     </div>
                     <div class="calibration-bar">
@@ -1003,8 +931,6 @@
             calibrationPercent: document.getElementById('calibration-percent'),
             calibrationBar: document.getElementById('calibration-bar'),
             calibrationLogs: document.getElementById('calibration-logs'),
-            calibrationPhaseName: document.getElementById('calibration-phase-name'),
-            calibrationTrialInfo: document.getElementById('calibration-trial-info'),
             calibrationInstruction: document.getElementById('calibration-instruction'),
             commandDisplay: document.getElementById('command-display'),
             commandIcon: document.getElementById('command-icon'),
@@ -1420,39 +1346,9 @@
                     elements.calibrationPercent.textContent = `${percent}%`;
                     elements.calibrationBar.style.width = `${percent}%`;
 
-                    // Update phase name display
-                    const phaseNames = {
-                        'baseline': 'BASELINE',
-                        'look_left': 'LOOK LEFT',
-                        'look_right': 'LOOK RIGHT',
-                        'jaw_clench': 'JAW CLENCH',
-                        'double_blink': 'DOUBLE BLINK',
-                        'countdown': 'GET READY',
-                        'action': 'ACTION!',
-                        'rest': 'REST',
-                        'complete': 'COMPLETE',
-                        'failed': 'FAILED'
-                    };
-                    elements.calibrationPhaseName.textContent = phaseNames[msg.phase] || msg.phase.toUpperCase();
-
-                    // Update trial info
-                    if (msg.total_trials > 0) {
-                        elements.calibrationTrialInfo.textContent = `Trial ${msg.trial}/${msg.total_trials}`;
-                    } else {
-                        elements.calibrationTrialInfo.textContent = '';
-                    }
-
-                    // Update instruction display with appropriate styling
+                    // Update instruction
                     if (msg.instruction) {
                         elements.calibrationInstruction.textContent = msg.instruction;
-                        elements.calibrationInstruction.className = 'calibration-instruction';
-                        if (msg.phase === 'countdown') {
-                            elements.calibrationInstruction.classList.add('countdown');
-                        } else if (msg.phase === 'action') {
-                            elements.calibrationInstruction.classList.add('action');
-                        } else if (msg.phase === 'rest') {
-                            elements.calibrationInstruction.classList.add('rest');
-                        }
                     }
 
                     // Update calibration logs
@@ -1465,18 +1361,18 @@
 
                     // Check if calibration is complete
                     if (msg.phase === 'complete' || msg.phase === 'failed' || msg.progress >= 1) {
-                        // Keep showing logs for a moment before hiding
                         setTimeout(() => {
                             elements.calibrationStatus.style.display = 'none';
                             elements.calibrationLogs.innerHTML = '';
-                        }, 5000);
+                        }, 3000);
                         elements.calibrateBtn.disabled = false;
 
                         if (msg.phase === 'complete' || (msg.result && msg.result.success)) {
                             log('Calibration complete!', 'success');
                             if (msg.result && msg.result.thresholds) {
-                                log(`Thresholds: blink=${msg.result.thresholds.blink_threshold?.toFixed(1)}, jaw=${msg.result.thresholds.jaw_threshold?.toFixed(0)}, eye=${msg.result.thresholds.eye_move_threshold?.toFixed(1)}, ratio=${msg.result.thresholds.lateral_ratio?.toFixed(2)}`, 'info');
+                                log(`Thresholds: blink=${msg.result.thresholds.blink_threshold?.toFixed(1)}, jaw=${msg.result.thresholds.jaw_threshold?.toFixed(0)}, eye=${msg.result.thresholds.eye_move_threshold?.toFixed(1)}`, 'info');
                             }
+                            log('Edit detection_multipliers.json to tune sensitivity', 'info');
                         } else if (msg.phase === 'failed') {
                             log(`Calibration failed: ${msg.result?.error || 'Unknown error'}`, 'error');
                         }

@@ -1,0 +1,7 @@
+{
+  "blink_multiplier": 1.1,
+  "jaw_multiplier": 1.1,
+  "eye_move_multiplier": 1.1,
+  "lateral_ratio": 1.1,
+  "_comment": "Edit these values to tune detection sensitivity. Lower = more sensitive, higher = less sensitive. Multipliers are applied to baseline standard deviation. lateral_ratio is the minimum FP1/FP2 ratio for eye movement detection."
+}
