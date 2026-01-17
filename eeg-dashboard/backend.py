@@ -119,6 +119,9 @@ class EEGState:
         self.calibration_progress = 0.0
         self.calibration_result = None
         self.calibration_logs = []
+        self.calibration_instruction = ""
+        self.calibration_trial = 0
+        self.calibration_total_trials = 0
 
 
 state = EEGState()
@@ -420,7 +423,21 @@ def detect_command() -> Optional[dict]:
 # -----------------------------------------------------------------------------
 
 def run_quick_calibration() -> dict:
-    """Run quick baseline calibration (10 seconds)."""
+    """
+    Run comprehensive multi-phase calibration.
+
+    Phases:
+    1. Baseline (10 seconds) - User looks straight, relaxed
+    2. Look Left (3 trials) - User looks left on countdown
+    3. Look Right (3 trials) - User looks right on countdown
+    4. Jaw Clench (3 trials) - User clenches jaw on countdown
+    5. Double Blink (3 trials) - User blinks twice on countdown
+
+    Each action trial:
+    - 3 second countdown (3, 2, 1)
+    - 2 second action window (record data)
+    - 2 second rest
+    """
     global state
 
     if not state.is_streaming:
@@ -428,17 +445,22 @@ def run_quick_calibration() -> dict:
         return {"success": False, "error": "Not streaming"}
 
     print("\n" + "=" * 60)
-    print("[CALIBRATION] Starting 10-second baseline calibration")
+    print("[CALIBRATION] Starting Multi-Phase Calibration")
     print("=" * 60)
-    print("[CALIBRATION] Instructions: Sit still, look straight ahead, relax")
-    print("[CALIBRATION] Avoid blinking and jaw clenching during calibration")
-    print("-" * 60)
 
     state.is_calibrating = True
-    state.calibration_phase = "baseline"
     state.calibration_progress = 0.0
-    state.calibration_result = None  # Will store the result
-    state.calibration_logs = []  # Store logs for frontend
+    state.calibration_result = None
+    state.calibration_logs = []
+
+    # Calibration data storage
+    calibration_data = {
+        'baseline': {'amplitudes': [], 'jaw_powers': [], 'fp1': [], 'fp2': []},
+        'look_left': {'fp1': [], 'fp2': [], 'ratios': []},
+        'look_right': {'fp1': [], 'fp2': [], 'ratios': []},
+        'jaw_clench': {'jaw_powers': []},
+        'double_blink': {'amplitudes': [], 'peak_counts': []},
+    }
 
     def add_log(msg, log_type="info"):
         """Add a calibration log entry."""
@@ -446,139 +468,325 @@ def run_quick_calibration() -> dict:
         state.calibration_logs.append(entry)
         print(f"[CALIBRATION] {msg}")
 
-    add_log("Calibration started", "info")
+    def set_phase(phase_name, instruction="", trial=0, total_trials=0):
+        """Update the current calibration phase."""
+        state.calibration_phase = phase_name
+        state.calibration_instruction = instruction
+        state.calibration_trial = trial
+        state.calibration_total_trials = total_trials
 
-    # Log channel configuration
-    if state.eeg_channels:
-        fp1_idx = state.eeg_channels[FP1_CHANNEL - 1] if len(state.eeg_channels) >= FP1_CHANNEL else -1
-        fp2_idx = state.eeg_channels[FP2_CHANNEL - 1] if len(state.eeg_channels) >= FP2_CHANNEL else -1
-        add_log(f"Channel config: FP1=Ch{FP1_CHANNEL}(idx:{fp1_idx}), FP2=Ch{FP2_CHANNEL}(idx:{fp2_idx})", "info")
-        print(f"[CALIBRATION] EEG channel indices from BrainFlow: {state.eeg_channels}")
+    def countdown(seconds, action_name):
+        """Run countdown before an action."""
+        for i in range(seconds, 0, -1):
+            set_phase("countdown", f"{i}... Get ready to {action_name}")
+            add_log(f"{i}...", "countdown")
+            time.sleep(1.0)
+        set_phase("action", f"NOW! {action_name.upper()}!")
+        add_log(f"NOW! {action_name.upper()}!", "action")
 
-    try:
-        # Collect baseline data for 10 seconds
-        duration = 10.0
-        amplitudes = []
-        jaw_powers = []
-        fp1_values = []
-        fp2_values = []
-        start_time = time.time()
-        last_log_time = 0
-        raw_logged = False
-
-        while time.time() - start_time < duration:
+    def collect_features(duration_sec):
+        """Collect features for a given duration."""
+        features_list = []
+        start = time.time()
+        while time.time() - start < duration_sec:
             if len(state.eeg_buffer_fp1) >= wc_config.WINDOW_SIZE_SAMPLES:
                 fp1 = np.array(list(state.eeg_buffer_fp1))
                 fp2 = np.array(list(state.eeg_buffer_fp2))
-
-                # Log raw data once for debugging
-                if not raw_logged:
-                    print(f"[CALIBRATION] RAW DATA DEBUG:")
-                    print(f"[CALIBRATION]   FP1 buffer size: {len(fp1)}, min={fp1.min():.4f}, max={fp1.max():.4f}, mean={fp1.mean():.4f}, std={fp1.std():.4f}")
-                    print(f"[CALIBRATION]   FP2 buffer size: {len(fp2)}, min={fp2.min():.4f}, max={fp2.max():.4f}, mean={fp2.mean():.4f}, std={fp2.std():.4f}")
-                    print(f"[CALIBRATION]   FP1 first 10 samples: {fp1[:10]}")
-                    print(f"[CALIBRATION]   FP2 first 10 samples: {fp2[:10]}")
-                    add_log(f"Raw FP1: min={fp1.min():.2f}, max={fp1.max():.2f}, std={fp1.std():.2f}", "info")
-                    add_log(f"Raw FP2: min={fp2.min():.2f}, max={fp2.max():.2f}, std={fp2.std():.2f}", "info")
-                    raw_logged = True
-
                 features = state.signal_processor.extract_features(fp1, fp2)
-                amp = max(features.fp1_max, features.fp2_max)
-                amplitudes.append(amp)
-                jaw_powers.append(features.jaw_power)
-                fp1_values.append(features.fp1_max)
-                fp2_values.append(features.fp2_max)
+                features_list.append(features)
+            time.sleep(0.1)
+        return features_list
 
-                # Log every 2 seconds
+    try:
+        # Total phases for progress calculation
+        total_phases = 5  # baseline + 4 action types
+        trials_per_action = 3
+        current_phase = 0
+
+        # =========================================================================
+        # PHASE 1: BASELINE (10 seconds)
+        # =========================================================================
+        add_log("=" * 40, "info")
+        add_log("PHASE 1: BASELINE RECORDING", "phase")
+        add_log("=" * 40, "info")
+        set_phase("baseline", "Sit still, look straight ahead, relax. Avoid blinking.")
+        add_log("Instructions: Sit still, look straight ahead, relax", "info")
+        add_log("Avoid blinking and jaw clenching", "info")
+
+        baseline_duration = 10.0
+        start_time = time.time()
+        last_log_time = 0
+
+        while time.time() - start_time < baseline_duration:
+            if len(state.eeg_buffer_fp1) >= wc_config.WINDOW_SIZE_SAMPLES:
+                fp1 = np.array(list(state.eeg_buffer_fp1))
+                fp2 = np.array(list(state.eeg_buffer_fp2))
+                features = state.signal_processor.extract_features(fp1, fp2)
+
+                calibration_data['baseline']['amplitudes'].append(max(features.fp1_max, features.fp2_max))
+                calibration_data['baseline']['jaw_powers'].append(features.jaw_power)
+                calibration_data['baseline']['fp1'].append(features.fp1_max)
+                calibration_data['baseline']['fp2'].append(features.fp2_max)
+
                 elapsed = time.time() - start_time
                 if elapsed - last_log_time >= 2.0:
-                    add_log(f"Progress {elapsed:.0f}s: FP1={features.fp1_max:.1f}uV, FP2={features.fp2_max:.1f}uV, Jaw={features.jaw_power:.0f}")
+                    add_log(f"Baseline {elapsed:.0f}s: FP1={features.fp1_max:.1f}, FP2={features.fp2_max:.1f}")
                     last_log_time = elapsed
 
-            state.calibration_progress = min((time.time() - start_time) / duration, 0.99)
+            progress_in_phase = (time.time() - start_time) / baseline_duration
+            state.calibration_progress = (current_phase + progress_in_phase) / total_phases
             time.sleep(0.2)
 
-        # Calculate thresholds
-        if amplitudes:
-            amp_mean = np.mean(amplitudes)
-            amp_std = np.std(amplitudes)
-            jaw_mean = np.mean(jaw_powers)
-            jaw_std = np.std(jaw_powers)
-            fp1_mean = np.mean(fp1_values)
-            fp2_mean = np.mean(fp2_values)
+        baseline_samples = len(calibration_data['baseline']['amplitudes'])
+        add_log(f"Baseline complete: {baseline_samples} samples collected", "success")
+        current_phase += 1
 
-            add_log(f"Collected {len(amplitudes)} samples", "info")
-            add_log(f"Baseline stats:", "info")
-            add_log(f"  Amplitude: mean={amp_mean:.1f}uV, std={amp_std:.1f}uV", "info")
-            add_log(f"  Jaw power: mean={jaw_mean:.0f}, std={jaw_std:.0f}", "info")
-            add_log(f"  FP1 mean={fp1_mean:.1f}uV, FP2 mean={fp2_mean:.1f}uV", "info")
+        # =========================================================================
+        # PHASE 2: LOOK LEFT (3 trials)
+        # =========================================================================
+        add_log("=" * 40, "info")
+        add_log("PHASE 2: LOOK LEFT CALIBRATION", "phase")
+        add_log("=" * 40, "info")
 
-            thresholds = {
-                'blink_threshold': float(amp_mean + 3.0 * amp_std),
-                'jaw_threshold': float(jaw_mean + 2.5 * jaw_std),
-                'eye_move_threshold': float(amp_mean + 1.5 * amp_std),
-                'lateral_ratio': wc_config.LATERAL_RATIO,
-                'baseline_amplitude': float(amp_mean),
-                'baseline_jaw_power': float(jaw_mean),
-            }
+        for trial in range(trials_per_action):
+            set_phase("look_left", f"Trial {trial + 1}/{trials_per_action}", trial + 1, trials_per_action)
+            add_log(f"Look Left - Trial {trial + 1}/{trials_per_action}", "trial")
 
-            add_log(f"Calculated thresholds:", "success")
-            add_log(f"  Blink threshold: {thresholds['blink_threshold']:.1f}uV (3x std)", "success")
-            add_log(f"  Jaw threshold: {thresholds['jaw_threshold']:.0f} (2.5x std)", "success")
-            add_log(f"  Eye move threshold: {thresholds['eye_move_threshold']:.1f}uV (1.5x std)", "success")
-            add_log(f"  Lateral ratio: {thresholds['lateral_ratio']}", "success")
+            # Rest period before countdown
+            set_phase("rest", "Rest and look straight ahead...")
+            add_log("Rest - look straight ahead", "info")
+            time.sleep(2.0)
 
-            # Update detector
-            state.command_detector.update_thresholds(thresholds)
-            state.calibration_data = {'thresholds': thresholds}
+            # Countdown
+            countdown(3, "LOOK LEFT")
 
-            # Save to file
-            import json
-            with open(wc_config.CALIBRATION_FILE, 'w') as f:
-                json.dump({
-                    'timestamp': datetime.now().isoformat(),
-                    'thresholds': thresholds,
-                    'stats': {
-                        'samples': len(amplitudes),
-                        'amp_mean': float(amp_mean),
-                        'amp_std': float(amp_std),
-                        'jaw_mean': float(jaw_mean),
-                        'jaw_std': float(jaw_std),
-                    }
-                }, f, indent=2)
+            # Action window (2 seconds)
+            action_features = collect_features(2.0)
+            if action_features:
+                # Get the peak values during action
+                max_fp1 = max(f.fp1_max for f in action_features)
+                max_fp2 = max(f.fp2_max for f in action_features)
+                # For look left, FP2 should be stronger
+                calibration_data['look_left']['fp1'].append(max_fp1)
+                calibration_data['look_left']['fp2'].append(max_fp2)
+                calibration_data['look_left']['ratios'].append(max_fp2 / (max_fp1 + 1e-6))
+                add_log(f"Recorded: FP1={max_fp1:.1f}, FP2={max_fp2:.1f}, ratio={max_fp2/(max_fp1+1e-6):.2f}", "success")
 
-            add_log(f"Calibration saved to {wc_config.CALIBRATION_FILE}", "success")
+            state.calibration_progress = (current_phase + (trial + 1) / trials_per_action) / total_phases
 
-            # Mark complete - set progress to 100% and store result
-            state.calibration_progress = 1.0
-            state.calibration_phase = "complete"
-            state.calibration_result = {
-                "success": True,
-                "thresholds": thresholds,
-                "logs": state.calibration_logs
-            }
+        current_phase += 1
 
-            print("-" * 60)
-            print("[CALIBRATION] Complete!")
-            print("=" * 60 + "\n")
+        # =========================================================================
+        # PHASE 3: LOOK RIGHT (3 trials)
+        # =========================================================================
+        add_log("=" * 40, "info")
+        add_log("PHASE 3: LOOK RIGHT CALIBRATION", "phase")
+        add_log("=" * 40, "info")
 
-            time.sleep(0.3)  # Give time for WebSocket to send the 100% update
-            state.is_calibrating = False
-            return {"success": True, "thresholds": thresholds}
+        for trial in range(trials_per_action):
+            set_phase("look_right", f"Trial {trial + 1}/{trials_per_action}", trial + 1, trials_per_action)
+            add_log(f"Look Right - Trial {trial + 1}/{trials_per_action}", "trial")
 
-        # No data collected
-        add_log("Error: No data collected during calibration", "error")
+            # Rest period
+            set_phase("rest", "Rest and look straight ahead...")
+            add_log("Rest - look straight ahead", "info")
+            time.sleep(2.0)
+
+            # Countdown
+            countdown(3, "LOOK RIGHT")
+
+            # Action window (2 seconds)
+            action_features = collect_features(2.0)
+            if action_features:
+                max_fp1 = max(f.fp1_max for f in action_features)
+                max_fp2 = max(f.fp2_max for f in action_features)
+                # For look right, FP1 should be stronger
+                calibration_data['look_right']['fp1'].append(max_fp1)
+                calibration_data['look_right']['fp2'].append(max_fp2)
+                calibration_data['look_right']['ratios'].append(max_fp1 / (max_fp2 + 1e-6))
+                add_log(f"Recorded: FP1={max_fp1:.1f}, FP2={max_fp2:.1f}, ratio={max_fp1/(max_fp2+1e-6):.2f}", "success")
+
+            state.calibration_progress = (current_phase + (trial + 1) / trials_per_action) / total_phases
+
+        current_phase += 1
+
+        # =========================================================================
+        # PHASE 4: JAW CLENCH (3 trials)
+        # =========================================================================
+        add_log("=" * 40, "info")
+        add_log("PHASE 4: JAW CLENCH CALIBRATION", "phase")
+        add_log("=" * 40, "info")
+
+        for trial in range(trials_per_action):
+            set_phase("jaw_clench", f"Trial {trial + 1}/{trials_per_action}", trial + 1, trials_per_action)
+            add_log(f"Jaw Clench - Trial {trial + 1}/{trials_per_action}", "trial")
+
+            # Rest period
+            set_phase("rest", "Rest and relax your jaw...")
+            add_log("Rest - relax your jaw", "info")
+            time.sleep(2.0)
+
+            # Countdown
+            countdown(3, "CLENCH JAW")
+
+            # Action window (2 seconds)
+            action_features = collect_features(2.0)
+            if action_features:
+                max_jaw = max(f.jaw_power for f in action_features)
+                calibration_data['jaw_clench']['jaw_powers'].append(max_jaw)
+                add_log(f"Recorded: Jaw Power={max_jaw:.0f}", "success")
+
+            state.calibration_progress = (current_phase + (trial + 1) / trials_per_action) / total_phases
+
+        current_phase += 1
+
+        # =========================================================================
+        # PHASE 5: DOUBLE BLINK (3 trials)
+        # =========================================================================
+        add_log("=" * 40, "info")
+        add_log("PHASE 5: DOUBLE BLINK CALIBRATION", "phase")
+        add_log("=" * 40, "info")
+
+        for trial in range(trials_per_action):
+            set_phase("double_blink", f"Trial {trial + 1}/{trials_per_action}", trial + 1, trials_per_action)
+            add_log(f"Double Blink - Trial {trial + 1}/{trials_per_action}", "trial")
+
+            # Rest period
+            set_phase("rest", "Rest and keep eyes open...")
+            add_log("Rest - keep eyes open", "info")
+            time.sleep(2.0)
+
+            # Countdown
+            countdown(3, "BLINK TWICE")
+
+            # Action window (2 seconds)
+            action_features = collect_features(2.0)
+            if action_features:
+                max_amp = max(max(f.fp1_max, f.fp2_max) for f in action_features)
+                blink_counts = [f.blink_count for f in action_features]
+                calibration_data['double_blink']['amplitudes'].append(max_amp)
+                calibration_data['double_blink']['peak_counts'].append(max(blink_counts))
+                add_log(f"Recorded: Amplitude={max_amp:.1f}, Blinks detected={max(blink_counts)}", "success")
+
+            state.calibration_progress = (current_phase + (trial + 1) / trials_per_action) / total_phases
+
+        # =========================================================================
+        # CALCULATE THRESHOLDS
+        # =========================================================================
+        add_log("=" * 40, "info")
+        add_log("CALCULATING THRESHOLDS", "phase")
+        add_log("=" * 40, "info")
+
+        # Baseline stats
+        baseline = calibration_data['baseline']
+        if baseline['amplitudes']:
+            baseline_amp_mean = np.mean(baseline['amplitudes'])
+            baseline_amp_std = np.std(baseline['amplitudes'])
+            baseline_jaw_mean = np.mean(baseline['jaw_powers'])
+            baseline_jaw_std = np.std(baseline['jaw_powers'])
+        else:
+            add_log("Warning: No baseline data, using defaults", "warning")
+            baseline_amp_mean = 20000.0
+            baseline_amp_std = 5000.0
+            baseline_jaw_mean = 200000.0
+            baseline_jaw_std = 50000.0
+
+        # Eye movement thresholds from actual calibration data
+        look_left = calibration_data['look_left']
+        look_right = calibration_data['look_right']
+
+        if look_left['fp2'] and look_right['fp1']:
+            # Calculate eye movement threshold as midpoint between baseline and action
+            left_fp2_mean = np.mean(look_left['fp2'])
+            right_fp1_mean = np.mean(look_right['fp1'])
+            eye_move_threshold = (baseline_amp_mean + min(left_fp2_mean, right_fp1_mean)) / 2
+
+            # Lateral ratio from actual data
+            left_ratio_mean = np.mean(look_left['ratios']) if look_left['ratios'] else 1.5
+            right_ratio_mean = np.mean(look_right['ratios']) if look_right['ratios'] else 1.5
+            # Use the lower ratio to ensure we capture both directions
+            lateral_ratio = min(left_ratio_mean, right_ratio_mean) * 0.8  # 80% of observed ratio
+            lateral_ratio = max(1.2, min(lateral_ratio, 2.0))  # Clamp between 1.2 and 2.0
+        else:
+            eye_move_threshold = baseline_amp_mean * 1.5
+            lateral_ratio = wc_config.LATERAL_RATIO
+
+        # Jaw clench threshold from actual calibration data
+        jaw_clench = calibration_data['jaw_clench']
+        if jaw_clench['jaw_powers']:
+            jaw_action_mean = np.mean(jaw_clench['jaw_powers'])
+            # Threshold at midpoint between baseline and action
+            jaw_threshold = (baseline_jaw_mean + jaw_action_mean) / 2
+        else:
+            jaw_threshold = baseline_jaw_mean + 2.5 * baseline_jaw_std
+
+        # Blink threshold from actual calibration data
+        double_blink = calibration_data['double_blink']
+        if double_blink['amplitudes']:
+            blink_action_mean = np.mean(double_blink['amplitudes'])
+            # Threshold at midpoint between baseline and blink amplitude
+            blink_threshold = (baseline_amp_mean + blink_action_mean) / 2
+        else:
+            blink_threshold = baseline_amp_mean + 3.0 * baseline_amp_std
+
+        thresholds = {
+            'blink_threshold': float(blink_threshold),
+            'jaw_threshold': float(jaw_threshold),
+            'eye_move_threshold': float(eye_move_threshold),
+            'lateral_ratio': float(lateral_ratio),
+            'baseline_amplitude': float(baseline_amp_mean),
+            'baseline_jaw_power': float(baseline_jaw_mean),
+        }
+
+        add_log("Calculated thresholds from calibration:", "success")
+        add_log(f"  Blink threshold: {thresholds['blink_threshold']:.1f}", "success")
+        add_log(f"  Jaw threshold: {thresholds['jaw_threshold']:.0f}", "success")
+        add_log(f"  Eye move threshold: {thresholds['eye_move_threshold']:.1f}", "success")
+        add_log(f"  Lateral ratio: {thresholds['lateral_ratio']:.2f}", "success")
+
+        # Update detector
+        state.command_detector.update_thresholds(thresholds)
+        state.calibration_data = {'thresholds': thresholds}
+
+        # Save to file with full calibration data
+        with open(wc_config.CALIBRATION_FILE, 'w') as f:
+            json.dump({
+                'timestamp': datetime.now().isoformat(),
+                'thresholds': thresholds,
+                'raw_data': {
+                    'baseline_samples': len(baseline['amplitudes']),
+                    'baseline_amp_mean': float(baseline_amp_mean),
+                    'baseline_amp_std': float(baseline_amp_std),
+                    'baseline_jaw_mean': float(baseline_jaw_mean),
+                    'look_left_trials': len(look_left['fp2']),
+                    'look_left_ratios': [float(r) for r in look_left['ratios']],
+                    'look_right_trials': len(look_right['fp1']),
+                    'look_right_ratios': [float(r) for r in look_right['ratios']],
+                    'jaw_clench_trials': len(jaw_clench['jaw_powers']),
+                    'jaw_clench_powers': [float(p) for p in jaw_clench['jaw_powers']],
+                    'blink_trials': len(double_blink['amplitudes']),
+                    'blink_amplitudes': [float(a) for a in double_blink['amplitudes']],
+                }
+            }, f, indent=2)
+
+        add_log(f"Calibration saved to {wc_config.CALIBRATION_FILE}", "success")
+
+        # Mark complete
         state.calibration_progress = 1.0
-        state.calibration_phase = "failed"
+        state.calibration_phase = "complete"
         state.calibration_result = {
-            "success": False,
-            "error": "No data collected",
+            "success": True,
+            "thresholds": thresholds,
             "logs": state.calibration_logs
         }
-        print("[CALIBRATION] Failed: No data collected\n")
-        time.sleep(0.3)
+
+        add_log("=" * 40, "info")
+        add_log("CALIBRATION COMPLETE!", "success")
+        add_log("=" * 40, "info")
+
+        time.sleep(0.5)
         state.is_calibrating = False
-        return {"success": False, "error": "No data collected"}
+        return {"success": True, "thresholds": thresholds}
 
     except Exception as e:
         add_log(f"Error: {str(e)}", "error")
@@ -590,6 +798,8 @@ def run_quick_calibration() -> dict:
             "logs": state.calibration_logs
         }
         print(f"[CALIBRATION] Failed: {str(e)}\n")
+        import traceback
+        traceback.print_exc()
         time.sleep(0.3)
         state.is_calibrating = False
         return {"success": False, "error": str(e)}
@@ -770,6 +980,9 @@ async def websocket_endpoint(websocket: WebSocket):
                     "type": "calibration_progress",
                     "phase": state.calibration_phase,
                     "progress": state.calibration_progress,
+                    "instruction": state.calibration_instruction,
+                    "trial": state.calibration_trial,
+                    "total_trials": state.calibration_total_trials,
                     "logs": state.calibration_logs[-10:] if state.calibration_logs else [],  # Last 10 logs
                 }
                 if state.calibration_result:
