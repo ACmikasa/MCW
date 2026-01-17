@@ -299,11 +299,10 @@ class EEGWheelchairController:
     def process_window(self) -> Optional[DetectionResult]:
         """
         Process one window of EEG data.
-
-        Returns:
-            DetectionResult or None if not enough data
+        
+        DEBUG MODE: Prints raw signal statistics.
         """
-        if not self.data_handler or not self.detector:
+        if not self.data_handler:
             return None
 
         # Get current window
@@ -312,24 +311,40 @@ class EEGWheelchairController:
         if fp1 is None or fp2 is None:
             return None
 
-        # Detect command
-        result = self.detector.get_command(fp1, fp2)
+        # --- DEBUG: Print Raw Values ---
+        # Calculate stats for raw signal
+        fp1_mean = np.mean(fp1)
+        fp1_std = np.std(fp1)
+        fp1_p2p = np.max(fp1) - np.min(fp1)
+        
+        fp2_mean = np.mean(fp2)
+        fp2_std = np.std(fp2)
+        fp2_p2p = np.max(fp2) - np.min(fp2)
 
-        # Update statistics
-        self.stats['total_windows'] += 1
+        # Print raw stats on one line (CR will overwrite)
+        print(f"\rRAW | FP1: mean={fp1_mean:8.1f} std={fp1_std:6.1f} p2p={fp1_p2p:6.1f} | "
+              f"FP2: mean={fp2_mean:8.1f} std={fp2_std:6.1f} p2p={fp2_p2p:6.1f}", end="")
 
-        if result.command:
-            self.stats['total_commands'] += 1
-            self.stats['commands_by_type'][result.command] += 1
-            self.stats['last_command'] = result.command
-            self.stats['last_command_time'] = result.timestamp
-            self.last_command_time = result.timestamp
-
-            # Send command to wheelchair
-            self.wheelchair.send_command(result.command, result.confidence)
-            self.safety_stop_sent = False
-
-        return result
+        return None  # Skip normal processing
+        
+        # Original processing logic disabled
+        # result = self.detector.get_command(fp1, fp2)
+        # 
+        # # Update statistics
+        # self.stats['total_windows'] += 1
+        # 
+        # if result.command:
+        #     self.stats['total_commands'] += 1
+        #     self.stats['commands_by_type'][result.command] += 1
+        #     self.stats['last_command'] = result.command
+        #     self.stats['last_command_time'] = result.timestamp
+        #     self.last_command_time = result.timestamp
+        # 
+        #     # Send command to wheelchair
+        #     self.wheelchair.send_command(result.command, result.confidence)
+        #     self.safety_stop_sent = False
+        # 
+        # return result
 
     def check_safety_timeout(self):
         """Check if safety stop should be triggered."""
