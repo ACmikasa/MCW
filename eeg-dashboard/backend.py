@@ -898,7 +898,11 @@ async def handle_command(websocket: WebSocket, message: dict):
 
 @app.get("/")
 async def serve_frontend():
-    return FileResponse("frontend.html")
+    # Resolve absolute path to frontend.html
+    frontend_path = Path(__file__).parent / "frontend.html"
+    if not frontend_path.exists():
+        raise RuntimeError(f"frontend.html not found at {frontend_path}")
+    return FileResponse(frontend_path)
 
 @app.get("/health")
 async def health_check():
