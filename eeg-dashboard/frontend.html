@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OpenBCI EEG Dashboard + Wheelchair Control</title>
-    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -230,9 +229,8 @@
         }
 
         .chart-container {
-            background: #12121a;
+            background: #1a1a2e;
             border-radius: 12px;
-            padding: 1rem;
             border: 1px solid #2a2a4a;
             overflow: hidden;
             display: flex;
@@ -243,22 +241,147 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 0.5rem;
+            padding: 0.5rem 1rem;
+            background: #12121a;
+            border-bottom: 1px solid #2a2a4a;
         }
 
         .chart-header h2 {
-            font-size: 1rem;
+            font-size: 0.9rem;
             font-weight: 500;
+            color: #00d4ff;
         }
 
         .chart-controls {
             display: flex;
             gap: 0.5rem;
+            align-items: center;
         }
 
-        #eeg-chart {
+        .chart-controls label {
+            font-size: 0.75rem;
+            color: #888;
+        }
+
+        .chart-controls select {
+            background: #2a2a4a;
+            border: 1px solid #3a3a5a;
+            color: #e0e0e0;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+        }
+
+        .eeg-display {
             flex: 1;
+            display: flex;
+            flex-direction: column;
             min-height: 0;
+            overflow: hidden;
+        }
+
+        .eeg-channels {
+            flex: 1;
+            overflow-y: auto;
+            background: #0d0d14;
+        }
+
+        .eeg-channel {
+            display: flex;
+            align-items: stretch;
+            height: 45px;
+            border-bottom: 1px solid #1a1a2e;
+            position: relative;
+        }
+
+        .eeg-channel:hover {
+            background: rgba(0, 212, 255, 0.05);
+        }
+
+        .channel-label {
+            width: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #12121a;
+            border-right: 1px solid #2a2a4a;
+        }
+
+        .channel-num {
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: #000;
+        }
+
+        .channel-scale {
+            width: 55px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 2px 4px;
+            font-size: 0.6rem;
+            color: #666;
+            background: #0f0f18;
+            border-right: 1px solid #1a1a2e;
+        }
+
+        .channel-waveform {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .channel-waveform canvas {
+            width: 100%;
+            height: 100%;
+        }
+
+        .channel-status {
+            width: 140px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding: 2px 8px;
+            font-size: 0.65rem;
+            text-align: right;
+            background: #0f0f18;
+            border-left: 1px solid #1a1a2e;
+        }
+
+        .channel-status .railed {
+            color: #ff4757;
+        }
+
+        .channel-status .not-railed {
+            color: #2ed573;
+        }
+
+        .channel-status .rms {
+            color: #888;
+        }
+
+        .eeg-time-axis {
+            height: 25px;
+            background: #12121a;
+            border-top: 1px solid #2a2a4a;
+            display: flex;
+            align-items: center;
+            padding-left: 85px;
+            position: relative;
+        }
+
+        .time-labels {
+            display: flex;
+            justify-content: space-between;
+            width: calc(100% - 140px);
+            font-size: 0.7rem;
+            color: #666;
         }
 
         .log-panel {
@@ -281,18 +404,6 @@
         .log-entry.success { color: #2ed573; }
         .log-entry.info { color: #00d4ff; }
         .log-entry.command { color: #ffa502; }
-
-        .time-window-slider {
-            width: 100%;
-            margin: 0.5rem 0;
-        }
-
-        .slider-label {
-            display: flex;
-            justify-content: space-between;
-            font-size: 0.75rem;
-            color: #666;
-        }
 
         /* Wheelchair Control Panel Styles */
         .command-display {
@@ -590,20 +701,6 @@
             </div>
 
             <div class="control-section">
-                <h3>Display</h3>
-                <div class="slider-label">
-                    <span>Time Window</span>
-                    <span id="time-window-value">5s</span>
-                </div>
-                <input type="range" id="time-window" class="time-window-slider" min="1" max="30" value="5">
-                <div class="slider-label" style="margin-top: 0.5rem;">
-                    <span>Y-Scale (uV)</span>
-                    <span id="y-scale-value">100</span>
-                </div>
-                <input type="range" id="y-scale" class="time-window-slider" min="25" max="500" value="100" step="25">
-            </div>
-
-            <div class="control-section">
                 <h3>Log</h3>
                 <div id="log-panel" class="log-panel"></div>
             </div>
@@ -612,13 +709,40 @@
         <!-- Center: EEG Chart -->
         <main class="chart-container">
             <div class="chart-header">
-                <h2>EEG Channels (1-16) | FP1=Ch9, FP2=Ch10</h2>
+                <h2>Time Series - EEG Channels</h2>
                 <div class="chart-controls">
-                    <button id="autoscale-btn" class="btn btn-secondary btn-small">Autoscale</button>
+                    <label>Vert Scale</label>
+                    <select id="vert-scale">
+                        <option value="50">50 uV</option>
+                        <option value="100">100 uV</option>
+                        <option value="200" selected>200 uV</option>
+                        <option value="400">400 uV</option>
+                        <option value="1000">1000 uV</option>
+                    </select>
+                    <label>Window</label>
+                    <select id="time-window-select">
+                        <option value="2">2 sec</option>
+                        <option value="5" selected>5 sec</option>
+                        <option value="10">10 sec</option>
+                    </select>
                     <button id="clear-btn" class="btn btn-secondary btn-small">Clear</button>
                 </div>
             </div>
-            <div id="eeg-chart"></div>
+            <div class="eeg-display">
+                <div class="eeg-channels" id="eeg-channels">
+                    <!-- Channel rows will be generated by JavaScript -->
+                </div>
+                <div class="eeg-time-axis">
+                    <div class="time-labels" id="time-labels">
+                        <span>-5</span>
+                        <span>-4</span>
+                        <span>-3</span>
+                        <span>-2</span>
+                        <span>-1</span>
+                        <span>0</span>
+                    </div>
+                </div>
+            </div>
         </main>
 
         <!-- Right Panel: Wheelchair Control -->
@@ -713,15 +837,13 @@
             wsUrl: `ws://${window.location.host}/ws`,
             numChannels: 16,
             timeWindowSeconds: 5,
-            yScale: 100,
+            vertScale: 200,  // uV scale for each channel (+/- this value)
             channelColors: [
                 '#ff6b6b', '#ffa502', '#ffd43b', '#69db7c',
                 '#38d9a9', '#3bc9db', '#4dabf7', '#748ffc',
                 '#9775fa', '#da77f2', '#f783ac', '#ff8787',
                 '#74c0fc', '#63e6be', '#a9e34b', '#ffd93d'
             ],
-            channelSpacing: 150,
-            dataScale: 1.0,  // Multiplier for data values (increase if signals too small)
             commandIcons: {
                 'forward': '&#x2191;',   // Up arrow
                 'backward': '&#x2193;',  // Down arrow
@@ -770,12 +892,9 @@
             statRate: document.getElementById('stat-rate'),
             statSamples: document.getElementById('stat-samples'),
             statDropped: document.getElementById('stat-dropped'),
-            timeWindow: document.getElementById('time-window'),
-            timeWindowValue: document.getElementById('time-window-value'),
-            yScale: document.getElementById('y-scale'),
-            yScaleValue: document.getElementById('y-scale-value'),
+            vertScaleSelect: document.getElementById('vert-scale'),
+            timeWindowSelect: document.getElementById('time-window-select'),
             logPanel: document.getElementById('log-panel'),
-            autoscaleBtn: document.getElementById('autoscale-btn'),
             clearBtn: document.getElementById('clear-btn'),
             // Wheelchair elements
             wheelchairToggle: document.getElementById('wheelchair-toggle'),
@@ -815,49 +934,166 @@
         }
 
         // =====================================================================
-        // Chart Setup
+        // EEG Display Setup (OpenBCI-style)
         // =====================================================================
 
-        let streamStartTime = null;  // Track when streaming started
+        let streamStartTime = null;
+        let channelCanvases = [];
+        let channelContexts = [];
+        let channelStats = [];  // Store stats for each channel
 
         function initChart() {
-            const traces = [];
+            const container = document.getElementById('eeg-channels');
+            container.innerHTML = '';
+            channelCanvases = [];
+            channelContexts = [];
+            channelStats = [];
+
             for (let i = 0; i < CONFIG.numChannels; i++) {
-                traces.push({
-                    x: [], y: [],
-                    type: 'scattergl',
-                    mode: 'lines',
-                    name: `Ch ${i + 1}`,
-                    line: { color: CONFIG.channelColors[i], width: 1 },
-                    hoverinfo: 'none',
+                // Initialize channel stats
+                channelStats.push({
+                    railed: 0,
+                    notRailed: 0,
+                    rms: 0,
+                    railedPercent: 0
                 });
+
+                // Create channel row
+                const row = document.createElement('div');
+                row.className = 'eeg-channel';
+                row.innerHTML = `
+                    <div class="channel-label">
+                        <div class="channel-num" style="background: ${CONFIG.channelColors[i]}">${i + 1}</div>
+                    </div>
+                    <div class="channel-scale">
+                        <span>+${CONFIG.vertScale}uV</span>
+                        <span>-${CONFIG.vertScale}uV</span>
+                    </div>
+                    <div class="channel-waveform">
+                        <canvas id="canvas-ch${i}"></canvas>
+                    </div>
+                    <div class="channel-status" id="status-ch${i}">
+                        <span class="not-railed">Not Railed 0%</span>
+                        <span class="rms">0.00 uVrms</span>
+                    </div>
+                `;
+                container.appendChild(row);
+
+                // Get canvas and context
+                const canvas = document.getElementById(`canvas-ch${i}`);
+                channelCanvases.push(canvas);
+
+                // Set canvas resolution
+                const rect = canvas.getBoundingClientRect();
+                canvas.width = rect.width * 2;  // 2x for retina
+                canvas.height = rect.height * 2;
+
+                const ctx = canvas.getContext('2d');
+                ctx.scale(2, 2);  // Scale for retina
+                channelContexts.push(ctx);
             }
 
-            const layout = {
-                paper_bgcolor: '#12121a',
-                plot_bgcolor: '#12121a',
-                margin: { l: 70, r: 20, t: 10, b: 40 },
-                xaxis: {
-                    title: 'Time (s)',
-                    color: '#666',
-                    gridcolor: '#2a2a4a',
-                    range: [0, CONFIG.timeWindowSeconds],
-                    dtick: 1,
-                },
-                yaxis: {
-                    title: '',
-                    color: '#666',
-                    gridcolor: '#2a2a4a',
-                    zeroline: false,
-                    range: [-CONFIG.yScale, CONFIG.numChannels * CONFIG.channelSpacing + CONFIG.yScale],
-                    tickvals: Array.from({length: CONFIG.numChannels}, (_, i) => i * CONFIG.channelSpacing),
-                    ticktext: Array.from({length: CONFIG.numChannels}, (_, i) => `Ch ${i + 1}`),
-                },
-                showlegend: false,
-                hovermode: false,
+            // Update time axis labels
+            updateTimeLabels();
+        }
+
+        function updateTimeLabels() {
+            const labels = document.getElementById('time-labels');
+            labels.innerHTML = '';
+            for (let t = -CONFIG.timeWindowSeconds; t <= 0; t++) {
+                const span = document.createElement('span');
+                span.textContent = t;
+                labels.appendChild(span);
+            }
+        }
+
+        function updateScaleLabels() {
+            document.querySelectorAll('.channel-scale').forEach(el => {
+                el.innerHTML = `<span>+${CONFIG.vertScale}uV</span><span>-${CONFIG.vertScale}uV</span>`;
+            });
+        }
+
+        function drawChannel(channelIndex) {
+            const canvas = channelCanvases[channelIndex];
+            const ctx = channelContexts[channelIndex];
+            const data = dataBuffers[channelIndex];
+
+            if (!canvas || !ctx || !data || data.length === 0) return;
+
+            const width = canvas.width / 2;  // Account for retina scaling
+            const height = canvas.height / 2;
+            const midY = height / 2;
+
+            // Clear canvas
+            ctx.fillStyle = '#0d0d14';
+            ctx.fillRect(0, 0, width, height);
+
+            // Draw center line
+            ctx.strokeStyle = '#1a1a2e';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(0, midY);
+            ctx.lineTo(width, midY);
+            ctx.stroke();
+
+            // Calculate samples to show based on time window
+            const samplesPerSecond = 125;
+            const samplesToShow = CONFIG.timeWindowSeconds * samplesPerSecond;
+            const startIdx = Math.max(0, data.length - samplesToShow);
+            const visibleData = data.slice(startIdx);
+
+            if (visibleData.length < 2) return;
+
+            // Calculate stats
+            let railedCount = 0;
+            let sumSquares = 0;
+            const railThreshold = CONFIG.vertScale * 0.95;
+
+            for (const val of visibleData) {
+                if (Math.abs(val) > railThreshold) railedCount++;
+                sumSquares += val * val;
+            }
+
+            const railedPercent = (railedCount / visibleData.length) * 100;
+            const rms = Math.sqrt(sumSquares / visibleData.length);
+
+            channelStats[channelIndex] = {
+                railedPercent: railedPercent,
+                rms: rms
             };
 
-            Plotly.newPlot('eeg-chart', traces, layout, { responsive: true, displayModeBar: false });
+            // Update status display
+            const statusEl = document.getElementById(`status-ch${channelIndex}`);
+            if (statusEl) {
+                const isRailed = railedPercent > 50;
+                statusEl.innerHTML = `
+                    <span class="${isRailed ? 'railed' : 'not-railed'}">${isRailed ? 'Railed' : 'Not Railed'} ${railedPercent.toFixed(2)}%</span>
+                    <span class="rms">${rms.toFixed(2)} uVrms</span>
+                `;
+            }
+
+            // Draw waveform
+            ctx.strokeStyle = CONFIG.channelColors[channelIndex];
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+
+            const xStep = width / samplesToShow;
+            const yScale = (height / 2) / CONFIG.vertScale;
+
+            for (let i = 0; i < visibleData.length; i++) {
+                const x = i * xStep;
+                // Clamp value to scale range
+                const clampedVal = Math.max(-CONFIG.vertScale, Math.min(CONFIG.vertScale, visibleData[i]));
+                const y = midY - (clampedVal * yScale);
+
+                if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+
+            ctx.stroke();
         }
 
         function updateChart() {
@@ -868,61 +1104,49 @@
                 streamStartTime = timeBuffer[0];
             }
 
-            // Calculate relative times from stream start
-            const now = timeBuffer[timeBuffer.length - 1] - streamStartTime;
-            const windowStart = Math.max(0, now - CONFIG.timeWindowSeconds);
-
-            // Find the index where our time window starts
-            let startIdx = 0;
-            for (let i = timeBuffer.length - 1; i >= 0; i--) {
-                const relTime = timeBuffer[i] - streamStartTime;
-                if (relTime < windowStart) {
-                    startIdx = i + 1;
-                    break;
-                }
-            }
-
-            // Build trace data
-            const traceData = { x: [], y: [] };
+            // Draw all channels
             for (let ch = 0; ch < CONFIG.numChannels; ch++) {
-                const channelData = dataBuffers[ch];
-                if (!channelData || channelData.length === 0) {
-                    traceData.x.push([]);
-                    traceData.y.push([]);
-                    continue;
-                }
-
-                const slicedData = channelData.slice(startIdx);
-                const slicedTimes = timeBuffer.slice(startIdx).map(t => t - streamStartTime);
-                const offset = ch * CONFIG.channelSpacing;
-
-                traceData.x.push(slicedTimes);
-                // Apply data scale and offset for each channel
-                traceData.y.push(slicedData.map(v => (v * CONFIG.dataScale) + offset));
+                drawChannel(ch);
             }
-
-            // Update chart with scrolling x-axis
-            const xRange = [windowStart, windowStart + CONFIG.timeWindowSeconds];
-
-            Plotly.update('eeg-chart',
-                { x: traceData.x, y: traceData.y },
-                {
-                    'xaxis.range': xRange,
-                    'yaxis.range': [-CONFIG.yScale, CONFIG.numChannels * CONFIG.channelSpacing + CONFIG.yScale]
-                }
-            );
         }
 
         function clearChart() {
             dataBuffers = [];
             timeBuffer = [];
-            streamStartTime = null;  // Reset stream start time
+            streamStartTime = null;
+
             for (let i = 0; i < CONFIG.numChannels; i++) {
                 dataBuffers.push([]);
+                if (channelContexts[i]) {
+                    const canvas = channelCanvases[i];
+                    const ctx = channelContexts[i];
+                    const width = canvas.width / 2;
+                    const height = canvas.height / 2;
+                    ctx.fillStyle = '#0d0d14';
+                    ctx.fillRect(0, 0, width, height);
+                }
             }
-            Plotly.update('eeg-chart', { x: Array(CONFIG.numChannels).fill([]), y: Array(CONFIG.numChannels).fill([]) });
             log('Chart cleared', 'info');
         }
+
+        // Handle window resize
+        function resizeCanvases() {
+            channelCanvases.forEach((canvas, i) => {
+                if (canvas) {
+                    const rect = canvas.getBoundingClientRect();
+                    canvas.width = rect.width * 2;
+                    canvas.height = rect.height * 2;
+                    const ctx = channelContexts[i];
+                    if (ctx) {
+                        ctx.scale(2, 2);
+                    }
+                }
+            });
+        }
+
+        window.addEventListener('resize', () => {
+            setTimeout(resizeCanvases, 100);
+        });
 
         // =====================================================================
         // Wheelchair Control UI
@@ -1142,30 +1366,27 @@
                 return;
             }
 
-            // Debug: log first data packet info and suggest scaling
+            // Debug: log first data packet info
             if (dataBuffers[0].length === 0 && eeg[0] && eeg[0].length > 0) {
                 console.log('First EEG data packet received:');
                 console.log('  Channels:', eeg.length);
                 console.log('  Samples per channel:', eeg[0].length);
                 console.log('  Ch1 sample values:', eeg[0].slice(0, 5));
-                console.log('  Timestamp range:', timestamps[0], '-', timestamps[timestamps.length - 1]);
 
-                // Check data range and suggest scaling
+                // Check data range
                 const allValues = eeg.flat();
                 const min = Math.min(...allValues);
                 const max = Math.max(...allValues);
                 const range = max - min;
                 console.log('  Data range: min=', min.toFixed(2), 'max=', max.toFixed(2), 'range=', range.toFixed(2));
 
-                // Auto-suggest scale if data is very small
-                if (range > 0 && range < 10) {
-                    const suggestedScale = Math.ceil(50 / range);
-                    console.warn(`  WARNING: Data range is small (${range.toFixed(2)}). Consider setting CONFIG.dataScale = ${suggestedScale}`);
-                    log(`Data range small (${range.toFixed(1)}). Auto-scaling applied.`, 'info');
-                    CONFIG.dataScale = suggestedScale;
-                } else if (range === 0) {
+                if (range === 0) {
                     console.error('  ERROR: All data values are identical - check electrode connection!');
                     log('WARNING: Flat signal detected - check electrodes!', 'error');
+                } else if (range < 1) {
+                    log(`Data range very small (${range.toFixed(2)} uV). Check electrode contact.`, 'info');
+                } else {
+                    log(`Receiving EEG data. Range: ${range.toFixed(1)} uV`, 'success');
                 }
             }
 
@@ -1233,17 +1454,16 @@
         elements.stopBtn.onclick = () => ws.send(JSON.stringify({ command: 'stop' }));
         elements.portSelect.onchange = () => elements.portInput.value = elements.portSelect.value;
 
-        elements.timeWindow.oninput = () => {
-            CONFIG.timeWindowSeconds = parseInt(elements.timeWindow.value);
-            elements.timeWindowValue.textContent = `${CONFIG.timeWindowSeconds}s`;
+        elements.vertScaleSelect.onchange = () => {
+            CONFIG.vertScale = parseInt(elements.vertScaleSelect.value);
+            updateScaleLabels();
         };
 
-        elements.yScale.oninput = () => {
-            CONFIG.yScale = parseInt(elements.yScale.value);
-            elements.yScaleValue.textContent = CONFIG.yScale;
+        elements.timeWindowSelect.onchange = () => {
+            CONFIG.timeWindowSeconds = parseInt(elements.timeWindowSelect.value);
+            updateTimeLabels();
         };
 
-        elements.autoscaleBtn.onclick = () => Plotly.relayout('eeg-chart', { 'yaxis.autorange': true, 'xaxis.autorange': true });
         elements.clearBtn.onclick = clearChart;
 
         // Wheelchair controls
