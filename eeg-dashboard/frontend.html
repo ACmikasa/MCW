@@ -721,6 +721,7 @@
                 '#74c0fc', '#63e6be', '#a9e34b', '#ffd93d'
             ],
             channelSpacing: 150,
+            dataScale: 1.0,  // Multiplier for data values (increase if signals too small)
             commandIcons: {
                 'forward': '&#x2191;',   // Up arrow
                 'backward': '&#x2193;',  // Down arrow
@@ -817,6 +818,8 @@
         // Chart Setup
         // =====================================================================
 
+        let streamStartTime = null;  // Track when streaming started
+
         function initChart() {
             const traces = [];
             for (let i = 0; i < CONFIG.numChannels; i++) {
@@ -833,7 +836,7 @@
             const layout = {
                 paper_bgcolor: '#12121a',
                 plot_bgcolor: '#12121a',
-                margin: { l: 60, r: 20, t: 10, b: 40 },
+                margin: { l: 70, r: 20, t: 10, b: 40 },
                 xaxis: {
                     title: 'Time (s)',
                     color: '#666',
@@ -842,9 +845,10 @@
                     dtick: 1,
                 },
                 yaxis: {
-                    title: 'Channels (uV)',
+                    title: '',
                     color: '#666',
                     gridcolor: '#2a2a4a',
+                    zeroline: false,
                     range: [-CONFIG.yScale, CONFIG.numChannels * CONFIG.channelSpacing + CONFIG.yScale],
                     tickvals: Array.from({length: CONFIG.numChannels}, (_, i) => i * CONFIG.channelSpacing),
                     ticktext: Array.from({length: CONFIG.numChannels}, (_, i) => `Ch ${i + 1}`),
@@ -859,37 +863,60 @@
         function updateChart() {
             if (timeBuffer.length === 0) return;
 
-            const traces = [];
-            const now = timeBuffer[timeBuffer.length - 1];
-            const windowStart = now - CONFIG.timeWindowSeconds;
+            // Initialize stream start time on first data
+            if (streamStartTime === null) {
+                streamStartTime = timeBuffer[0];
+            }
 
+            // Calculate relative times from stream start
+            const now = timeBuffer[timeBuffer.length - 1] - streamStartTime;
+            const windowStart = Math.max(0, now - CONFIG.timeWindowSeconds);
+
+            // Find the index where our time window starts
             let startIdx = 0;
             for (let i = timeBuffer.length - 1; i >= 0; i--) {
-                if (timeBuffer[i] < windowStart) {
+                const relTime = timeBuffer[i] - streamStartTime;
+                if (relTime < windowStart) {
                     startIdx = i + 1;
                     break;
                 }
             }
 
-            const times = timeBuffer.slice(startIdx).map(t => t - timeBuffer[0]);
-
+            // Build trace data
+            const traceData = { x: [], y: [] };
             for (let ch = 0; ch < CONFIG.numChannels; ch++) {
-                const data = dataBuffers[ch].slice(startIdx);
+                const channelData = dataBuffers[ch];
+                if (!channelData || channelData.length === 0) {
+                    traceData.x.push([]);
+                    traceData.y.push([]);
+                    continue;
+                }
+
+                const slicedData = channelData.slice(startIdx);
+                const slicedTimes = timeBuffer.slice(startIdx).map(t => t - streamStartTime);
                 const offset = ch * CONFIG.channelSpacing;
-                traces.push({ x: times, y: data.map(v => v + offset) });
+
+                traceData.x.push(slicedTimes);
+                // Apply data scale and offset for each channel
+                traceData.y.push(slicedData.map(v => (v * CONFIG.dataScale) + offset));
             }
 
-            const xRange = [Math.max(0, times[times.length - 1] - CONFIG.timeWindowSeconds), times[times.length - 1]];
+            // Update chart with scrolling x-axis
+            const xRange = [windowStart, windowStart + CONFIG.timeWindowSeconds];
 
             Plotly.update('eeg-chart',
-                { x: traces.map(t => t.x), y: traces.map(t => t.y) },
-                { 'xaxis.range': xRange, 'yaxis.range': [-CONFIG.yScale, CONFIG.numChannels * CONFIG.channelSpacing + CONFIG.yScale] }
+                { x: traceData.x, y: traceData.y },
+                {
+                    'xaxis.range': xRange,
+                    'yaxis.range': [-CONFIG.yScale, CONFIG.numChannels * CONFIG.channelSpacing + CONFIG.yScale]
+                }
             );
         }
 
         function clearChart() {
             dataBuffers = [];
             timeBuffer = [];
+            streamStartTime = null;  // Reset stream start time
             for (let i = 0; i < CONFIG.numChannels; i++) {
                 dataBuffers.push([]);
             }
@@ -1110,7 +1137,37 @@
 
         function processEEGData(msg) {
             const { eeg, timestamps, stats } = msg;
-            if (!eeg || eeg.length === 0) return;
+            if (!eeg || eeg.length === 0) {
+                console.warn('No EEG data in message');
+                return;
+            }
+
+            // Debug: log first data packet info and suggest scaling
+            if (dataBuffers[0].length === 0 && eeg[0] && eeg[0].length > 0) {
+                console.log('First EEG data packet received:');
+                console.log('  Channels:', eeg.length);
+                console.log('  Samples per channel:', eeg[0].length);
+                console.log('  Ch1 sample values:', eeg[0].slice(0, 5));
+                console.log('  Timestamp range:', timestamps[0], '-', timestamps[timestamps.length - 1]);
+
+                // Check data range and suggest scaling
+                const allValues = eeg.flat();
+                const min = Math.min(...allValues);
+                const max = Math.max(...allValues);
+                const range = max - min;
+                console.log('  Data range: min=', min.toFixed(2), 'max=', max.toFixed(2), 'range=', range.toFixed(2));
+
+                // Auto-suggest scale if data is very small
+                if (range > 0 && range < 10) {
+                    const suggestedScale = Math.ceil(50 / range);
+                    console.warn(`  WARNING: Data range is small (${range.toFixed(2)}). Consider setting CONFIG.dataScale = ${suggestedScale}`);
+                    log(`Data range small (${range.toFixed(1)}). Auto-scaling applied.`, 'info');
+                    CONFIG.dataScale = suggestedScale;
+                } else if (range === 0) {
+                    console.error('  ERROR: All data values are identical - check electrode connection!');
+                    log('WARNING: Flat signal detected - check electrodes!', 'error');
+                }
+            }
 
             for (let ch = 0; ch < eeg.length && ch < CONFIG.numChannels; ch++) {
                 dataBuffers[ch].push(...eeg[ch]);

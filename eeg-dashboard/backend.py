@@ -423,6 +423,13 @@ def run_quick_calibration() -> dict:
 
     add_log("Calibration started", "info")
 
+    # Log channel configuration
+    if state.eeg_channels:
+        fp1_idx = state.eeg_channels[FP1_CHANNEL - 1] if len(state.eeg_channels) >= FP1_CHANNEL else -1
+        fp2_idx = state.eeg_channels[FP2_CHANNEL - 1] if len(state.eeg_channels) >= FP2_CHANNEL else -1
+        add_log(f"Channel config: FP1=Ch{FP1_CHANNEL}(idx:{fp1_idx}), FP2=Ch{FP2_CHANNEL}(idx:{fp2_idx})", "info")
+        print(f"[CALIBRATION] EEG channel indices from BrainFlow: {state.eeg_channels}")
+
     try:
         # Collect baseline data for 10 seconds
         duration = 10.0
@@ -432,11 +439,23 @@ def run_quick_calibration() -> dict:
         fp2_values = []
         start_time = time.time()
         last_log_time = 0
+        raw_logged = False
 
         while time.time() - start_time < duration:
             if len(state.eeg_buffer_fp1) >= wc_config.WINDOW_SIZE_SAMPLES:
                 fp1 = np.array(list(state.eeg_buffer_fp1))
                 fp2 = np.array(list(state.eeg_buffer_fp2))
+
+                # Log raw data once for debugging
+                if not raw_logged:
+                    print(f"[CALIBRATION] RAW DATA DEBUG:")
+                    print(f"[CALIBRATION]   FP1 buffer size: {len(fp1)}, min={fp1.min():.4f}, max={fp1.max():.4f}, mean={fp1.mean():.4f}, std={fp1.std():.4f}")
+                    print(f"[CALIBRATION]   FP2 buffer size: {len(fp2)}, min={fp2.min():.4f}, max={fp2.max():.4f}, mean={fp2.mean():.4f}, std={fp2.std():.4f}")
+                    print(f"[CALIBRATION]   FP1 first 10 samples: {fp1[:10]}")
+                    print(f"[CALIBRATION]   FP2 first 10 samples: {fp2[:10]}")
+                    add_log(f"Raw FP1: min={fp1.min():.2f}, max={fp1.max():.2f}, std={fp1.std():.2f}", "info")
+                    add_log(f"Raw FP2: min={fp2.min():.2f}, max={fp2.max():.2f}, std={fp2.std():.2f}", "info")
+                    raw_logged = True
 
                 features = state.signal_processor.extract_features(fp1, fp2)
                 amp = max(features.fp1_max, features.fp2_max)

@@ -256,6 +256,10 @@ class SignalProcessor:
         Returns:
             Features dataclass with all extracted features
         """
+        # Check for flat/zero signal (likely electrode issue)
+        if np.std(fp1_raw) < 0.01 and np.std(fp2_raw) < 0.01:
+            logger.warning(f"Signal appears flat: FP1 std={np.std(fp1_raw):.4f}, FP2 std={np.std(fp2_raw):.4f}")
+
         # Preprocess signals
         fp1_eog, fp2_eog, fp1_emg, fp2_emg = self.preprocess(fp1_raw, fp2_raw)
 

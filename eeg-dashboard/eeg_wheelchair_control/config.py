@@ -30,8 +30,9 @@ EOG_LOWPASS = 15.0   # Hz - removes muscle noise
 
 # Bandpass filter for EMG signals (jaw clench detection)
 # Muscle activity produces high-frequency signals 20-100+ Hz
+# NOTE: Nyquist = 62.5 Hz (for 125 Hz sampling), so max lowpass is ~60 Hz
 EMG_HIGHPASS = 20.0   # Hz - removes eye artifacts
-EMG_LOWPASS = 100.0   # Hz - captures muscle activity
+EMG_LOWPASS = 55.0    # Hz - captures muscle activity (must be < Nyquist)
 
 # Butterworth filter order
 # 4th order provides good rolloff without excessive ringing
