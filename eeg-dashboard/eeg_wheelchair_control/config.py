@@ -7,10 +7,14 @@ All threshold values and timing parameters are documented with their rationale.
 # =============================================================================
 # Channel Configuration
 # =============================================================================
-# OpenBCI Cyton+Daisy channel mapping (0-indexed from BrainFlow)
+# OpenBCI Cyton+Daisy channel mapping (1-indexed, converted to 0-indexed in code)
 # FP1 and FP2 are frontal polar electrodes - ideal for EOG and blink detection
-FP1_CHANNEL = 9   # Left frontal electrode
-FP2_CHANNEL = 10  # Right frontal electrode
+#
+# If using Daisy board (channels 9-16): FP1=9, FP2=10
+# If Daisy not working, use Cyton (channels 1-8): FP1=1, FP2=2
+#
+FP1_CHANNEL = 9   # Left frontal electrode (Daisy board)
+FP2_CHANNEL = 10  # Right frontal electrode (Daisy board)
 
 # Sampling rate for OpenBCI Cyton+Daisy
 SAMPLING_RATE = 125  # Hz

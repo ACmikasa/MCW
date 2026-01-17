@@ -1378,46 +1378,31 @@
                 return;
             }
 
-            // Auto-gain calculation on first data packet
-            if (dataBuffers[0].length === 0 && eeg[0] && eeg[0].length > 0) {
-                console.log('First EEG data packet received:');
-                console.log('  Channels:', eeg.length);
-                console.log('  Samples per channel:', eeg[0].length);
-
+            // Auto-gain calculation - only on first packet, then lock it in
+            if (CONFIG.autoGain && dataBuffers[0].length === 0 && eeg[0] && eeg[0].length > 0) {
                 // Check data range across all channels
                 const allValues = eeg.flat();
-                const min = Math.min(...allValues);
-                const max = Math.max(...allValues);
-                const absMax = Math.max(Math.abs(min), Math.abs(max));
-                const range = max - min;
+                const absMax = Math.max(...allValues.map(Math.abs));
 
-                console.log('  Raw data range: min=', min.toFixed(2), 'max=', max.toFixed(2), 'absMax=', absMax.toFixed(2));
-
-                if (range === 0) {
-                    console.error('  ERROR: All data values are identical - check electrode connection!');
-                    log('WARNING: Flat signal detected - check electrodes!', 'error');
-                } else if (CONFIG.autoGain && absMax > 0) {
-                    // Auto-calculate gain to fit data in +/- vertScale range
-                    // Target: absMax * gain = vertScale * 0.8 (leave some headroom)
-                    const targetAmplitude = CONFIG.vertScale * 0.8;
-                    const calculatedGain = targetAmplitude / absMax;
-
+                if (absMax > 0) {
+                    // Calculate gain to fit data in +/- vertScale range (80% headroom)
+                    const calculatedGain = (CONFIG.vertScale * 0.8) / absMax;
                     CONFIG.gain = calculatedGain;
-                    console.log(`  Auto-gain calculated: ${calculatedGain.toExponential(2)} (raw max: ${absMax.toFixed(0)})`);
-                    log(`Auto-gain: ${calculatedGain.toExponential(2)} (raw: ${absMax.toFixed(0)})`, 'success');
+                    CONFIG.autoGain = false;  // Lock it in - don't recalculate
 
-                    // Update the dropdown to show "Auto"
-                    if (elements.gainSelect) {
-                        elements.gainSelect.value = 'auto';
-                    }
+                    console.log(`Auto-gain set to ${calculatedGain.toExponential(2)} (raw max: ${absMax.toFixed(0)})`);
+                    log(`Gain locked: ${calculatedGain.toExponential(2)}`, 'success');
                 }
             }
 
-            // Apply gain and store data
+            // Apply gain and store data (simple loop, no .map for performance)
             for (let ch = 0; ch < eeg.length && ch < CONFIG.numChannels; ch++) {
-                const scaledData = eeg[ch].map(v => v * CONFIG.gain);
-                dataBuffers[ch].push(...scaledData);
-                while (dataBuffers[ch].length > maxBufferSize) dataBuffers[ch].shift();
+                const chData = eeg[ch];
+                const buf = dataBuffers[ch];
+                for (let i = 0; i < chData.length; i++) {
+                    buf.push(chData[i] * CONFIG.gain);
+                }
+                while (buf.length > maxBufferSize) buf.shift();
             }
 
             timeBuffer.push(...timestamps);
@@ -1483,13 +1468,12 @@
             const val = elements.gainSelect.value;
             if (val === 'auto') {
                 CONFIG.autoGain = true;
-                // Reset buffers to trigger auto-gain recalculation
-                clearChart();
-                log('Auto-gain enabled. Data will recalibrate.', 'info');
+                clearChart();  // Reset to trigger auto-gain on next data
+                log('Auto-gain will recalculate on next data', 'info');
             } else {
                 CONFIG.autoGain = false;
                 CONFIG.gain = parseFloat(val);
-                log(`Manual gain set to ${val}`, 'info');
+                log(`Gain set to ${val}x`, 'info');
             }
         };
 
