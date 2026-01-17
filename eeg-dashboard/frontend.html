@@ -711,7 +711,16 @@
             <div class="chart-header">
                 <h2>Time Series - EEG Channels</h2>
                 <div class="chart-controls">
-                    <label>Vert Scale</label>
+                    <label>Gain</label>
+                    <select id="gain-select">
+                        <option value="auto" selected>Auto</option>
+                        <option value="1">1x</option>
+                        <option value="0.1">0.1x</option>
+                        <option value="0.01">0.01x</option>
+                        <option value="0.001">0.001x</option>
+                        <option value="0.0001">0.0001x</option>
+                    </select>
+                    <label>Scale</label>
                     <select id="vert-scale">
                         <option value="50">50 uV</option>
                         <option value="100">100 uV</option>
@@ -838,6 +847,8 @@
             numChannels: 16,
             timeWindowSeconds: 5,
             vertScale: 200,  // uV scale for each channel (+/- this value)
+            gain: 0.001,     // Gain to scale down raw values (adjust based on actual data)
+            autoGain: true,  // Automatically calculate gain from data
             channelColors: [
                 '#ff6b6b', '#ffa502', '#ffd43b', '#69db7c',
                 '#38d9a9', '#3bc9db', '#4dabf7', '#748ffc',
@@ -892,6 +903,7 @@
             statRate: document.getElementById('stat-rate'),
             statSamples: document.getElementById('stat-samples'),
             statDropped: document.getElementById('stat-dropped'),
+            gainSelect: document.getElementById('gain-select'),
             vertScaleSelect: document.getElementById('vert-scale'),
             timeWindowSelect: document.getElementById('time-window-select'),
             logPanel: document.getElementById('log-panel'),
@@ -1366,32 +1378,45 @@
                 return;
             }
 
-            // Debug: log first data packet info
+            // Auto-gain calculation on first data packet
             if (dataBuffers[0].length === 0 && eeg[0] && eeg[0].length > 0) {
                 console.log('First EEG data packet received:');
                 console.log('  Channels:', eeg.length);
                 console.log('  Samples per channel:', eeg[0].length);
-                console.log('  Ch1 sample values:', eeg[0].slice(0, 5));
 
-                // Check data range
+                // Check data range across all channels
                 const allValues = eeg.flat();
                 const min = Math.min(...allValues);
                 const max = Math.max(...allValues);
+                const absMax = Math.max(Math.abs(min), Math.abs(max));
                 const range = max - min;
-                console.log('  Data range: min=', min.toFixed(2), 'max=', max.toFixed(2), 'range=', range.toFixed(2));
+
+                console.log('  Raw data range: min=', min.toFixed(2), 'max=', max.toFixed(2), 'absMax=', absMax.toFixed(2));
 
                 if (range === 0) {
                     console.error('  ERROR: All data values are identical - check electrode connection!');
                     log('WARNING: Flat signal detected - check electrodes!', 'error');
-                } else if (range < 1) {
-                    log(`Data range very small (${range.toFixed(2)} uV). Check electrode contact.`, 'info');
-                } else {
-                    log(`Receiving EEG data. Range: ${range.toFixed(1)} uV`, 'success');
+                } else if (CONFIG.autoGain && absMax > 0) {
+                    // Auto-calculate gain to fit data in +/- vertScale range
+                    // Target: absMax * gain = vertScale * 0.8 (leave some headroom)
+                    const targetAmplitude = CONFIG.vertScale * 0.8;
+                    const calculatedGain = targetAmplitude / absMax;
+
+                    CONFIG.gain = calculatedGain;
+                    console.log(`  Auto-gain calculated: ${calculatedGain.toExponential(2)} (raw max: ${absMax.toFixed(0)})`);
+                    log(`Auto-gain: ${calculatedGain.toExponential(2)} (raw: ${absMax.toFixed(0)})`, 'success');
+
+                    // Update the dropdown to show "Auto"
+                    if (elements.gainSelect) {
+                        elements.gainSelect.value = 'auto';
+                    }
                 }
             }
 
+            // Apply gain and store data
             for (let ch = 0; ch < eeg.length && ch < CONFIG.numChannels; ch++) {
-                dataBuffers[ch].push(...eeg[ch]);
+                const scaledData = eeg[ch].map(v => v * CONFIG.gain);
+                dataBuffers[ch].push(...scaledData);
                 while (dataBuffers[ch].length > maxBufferSize) dataBuffers[ch].shift();
             }
 
@@ -1454,9 +1479,28 @@
         elements.stopBtn.onclick = () => ws.send(JSON.stringify({ command: 'stop' }));
         elements.portSelect.onchange = () => elements.portInput.value = elements.portSelect.value;
 
+        elements.gainSelect.onchange = () => {
+            const val = elements.gainSelect.value;
+            if (val === 'auto') {
+                CONFIG.autoGain = true;
+                // Reset buffers to trigger auto-gain recalculation
+                clearChart();
+                log('Auto-gain enabled. Data will recalibrate.', 'info');
+            } else {
+                CONFIG.autoGain = false;
+                CONFIG.gain = parseFloat(val);
+                log(`Manual gain set to ${val}`, 'info');
+            }
+        };
+
         elements.vertScaleSelect.onchange = () => {
             CONFIG.vertScale = parseInt(elements.vertScaleSelect.value);
             updateScaleLabels();
+            // Recalculate auto-gain if enabled
+            if (CONFIG.autoGain) {
+                clearChart();
+                log('Scale changed. Auto-gain will recalibrate.', 'info');
+            }
         };
 
         elements.timeWindowSelect.onchange = () => {

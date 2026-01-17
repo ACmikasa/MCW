@@ -185,6 +185,31 @@ def connect_board(serial_port: str) -> dict:
         # Prepare session (opens connection)
         state.board.prepare_session()
 
+        # Configure PGA gain for all channels to reduce amplitude
+        # OpenBCI gain codes: 0=24x(default), 1=1x, 2=2x, 3=4x, 4=6x, 5=8x, 6=12x
+        # Setting to 1x gain to reduce signal amplitude (code = 1)
+        # Command format: x{channel}{power}{gain}{input}{bias}{srb2}{srb1}X
+        print("[BOARD] Configuring PGA gain to 1x for all channels...")
+        try:
+            # Cyton channels 1-8
+            for ch in range(1, 9):
+                # x{ch}010110X = channel on, gain=1x, normal input, bias on, srb2 on, srb1 off
+                cmd = f"x{ch}010110X"
+                state.board.config_board(cmd)
+                time.sleep(0.05)  # Small delay between commands
+
+            # Daisy channels 9-16 (use Q,W,E,R,T,Y,U,I)
+            daisy_chars = ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I']
+            for i, ch_char in enumerate(daisy_chars):
+                cmd = f"x{ch_char}010110X"
+                state.board.config_board(cmd)
+                time.sleep(0.05)
+
+            print("[BOARD] PGA gain set to 1x for all 16 channels")
+        except Exception as e:
+            print(f"[BOARD] Warning: Could not configure PGA gain: {e}")
+            print("[BOARD] Continuing with default gain (24x)")
+
         # Get board specifications
         state.sampling_rate = BoardShim.get_sampling_rate(BOARD_ID)
         state.eeg_channels = BoardShim.get_eeg_channels(BOARD_ID)
