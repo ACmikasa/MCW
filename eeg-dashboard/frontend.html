@@ -467,6 +467,38 @@
             transition: width 0.1s;
         }
 
+        .calibration-log-panel {
+            background: #0a0a0f;
+            border-radius: 6px;
+            padding: 0.5rem;
+            max-height: 120px;
+            overflow-y: auto;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 0.7rem;
+        }
+
+        .calibration-log-entry {
+            padding: 0.2rem 0;
+            border-bottom: 1px solid #1a1a2e;
+            color: #888;
+        }
+
+        .calibration-log-entry:last-child {
+            border-bottom: none;
+        }
+
+        .calibration-log-entry.success {
+            color: #2ed573;
+        }
+
+        .calibration-log-entry.error {
+            color: #ff4757;
+        }
+
+        .calibration-log-entry.info {
+            color: #00d4ff;
+        }
+
         /* Custom scrollbar */
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: #1a1a2e; }
@@ -606,6 +638,10 @@
                     <div class="calibration-bar">
                         <div class="calibration-progress" id="calibration-bar" style="width: 0%"></div>
                     </div>
+                    <div style="font-size: 0.75rem; color: #ffa502; margin-top: 0.5rem; text-align: center;">
+                        Sit still, look straight ahead, relax.<br>Don't blink or clench jaw.
+                    </div>
+                    <div id="calibration-logs" class="calibration-log-panel" style="margin-top: 0.5rem;"></div>
                 </div>
             </div>
 
@@ -746,6 +782,7 @@
             calibrationStatus: document.getElementById('calibration-status'),
             calibrationPercent: document.getElementById('calibration-percent'),
             calibrationBar: document.getElementById('calibration-bar'),
+            calibrationLogs: document.getElementById('calibration-logs'),
             commandDisplay: document.getElementById('command-display'),
             commandIcon: document.getElementById('command-icon'),
             commandText: document.getElementById('command-text'),
@@ -1028,10 +1065,40 @@
                     const percent = Math.round(msg.progress * 100);
                     elements.calibrationPercent.textContent = `${percent}%`;
                     elements.calibrationBar.style.width = `${percent}%`;
-                    if (msg.progress >= 1) {
-                        elements.calibrationStatus.style.display = 'none';
+
+                    // Update calibration logs
+                    if (msg.logs && msg.logs.length > 0) {
+                        elements.calibrationLogs.innerHTML = msg.logs.map(entry =>
+                            `<div class="calibration-log-entry ${entry.type}">${entry.message}</div>`
+                        ).join('');
+                        elements.calibrationLogs.scrollTop = elements.calibrationLogs.scrollHeight;
+                    }
+
+                    // Check if calibration is complete
+                    if (msg.phase === 'complete' || msg.phase === 'failed' || msg.progress >= 1) {
+                        // Keep showing logs for a moment before hiding
+                        setTimeout(() => {
+                            elements.calibrationStatus.style.display = 'none';
+                            elements.calibrationLogs.innerHTML = '';
+                        }, 3000);
                         elements.calibrateBtn.disabled = false;
-                        log('Calibration complete!', 'success');
+
+                        if (msg.phase === 'complete' || (msg.result && msg.result.success)) {
+                            log('Calibration complete!', 'success');
+                            if (msg.result && msg.result.thresholds) {
+                                log(`Thresholds: blink=${msg.result.thresholds.blink_threshold?.toFixed(1)}, jaw=${msg.result.thresholds.jaw_threshold?.toFixed(0)}`, 'info');
+                            }
+                            // Log all calibration entries to main log
+                            if (msg.result && msg.result.logs) {
+                                msg.result.logs.forEach(entry => {
+                                    if (entry.type === 'success' || entry.message.includes('threshold')) {
+                                        log(entry.message, entry.type);
+                                    }
+                                });
+                            }
+                        } else if (msg.phase === 'failed') {
+                            log(`Calibration failed: ${msg.result?.error || 'Unknown error'}`, 'error');
+                        }
                     }
                     break;
 

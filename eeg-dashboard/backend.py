@@ -117,6 +117,8 @@ class EEGState:
         self.is_calibrating = False
         self.calibration_phase = ""
         self.calibration_progress = 0.0
+        self.calibration_result = None
+        self.calibration_logs = []
 
 
 state = EEGState()
@@ -397,18 +399,39 @@ def run_quick_calibration() -> dict:
     global state
 
     if not state.is_streaming:
+        print("[CALIBRATION] Error: Not streaming")
         return {"success": False, "error": "Not streaming"}
+
+    print("\n" + "=" * 60)
+    print("[CALIBRATION] Starting 10-second baseline calibration")
+    print("=" * 60)
+    print("[CALIBRATION] Instructions: Sit still, look straight ahead, relax")
+    print("[CALIBRATION] Avoid blinking and jaw clenching during calibration")
+    print("-" * 60)
 
     state.is_calibrating = True
     state.calibration_phase = "baseline"
     state.calibration_progress = 0.0
+    state.calibration_result = None  # Will store the result
+    state.calibration_logs = []  # Store logs for frontend
+
+    def add_log(msg, log_type="info"):
+        """Add a calibration log entry."""
+        entry = {"time": datetime.now().isoformat(), "message": msg, "type": log_type}
+        state.calibration_logs.append(entry)
+        print(f"[CALIBRATION] {msg}")
+
+    add_log("Calibration started", "info")
 
     try:
         # Collect baseline data for 10 seconds
         duration = 10.0
         amplitudes = []
         jaw_powers = []
+        fp1_values = []
+        fp2_values = []
         start_time = time.time()
+        last_log_time = 0
 
         while time.time() - start_time < duration:
             if len(state.eeg_buffer_fp1) >= wc_config.WINDOW_SIZE_SAMPLES:
@@ -416,10 +439,19 @@ def run_quick_calibration() -> dict:
                 fp2 = np.array(list(state.eeg_buffer_fp2))
 
                 features = state.signal_processor.extract_features(fp1, fp2)
-                amplitudes.append(max(features.fp1_max, features.fp2_max))
+                amp = max(features.fp1_max, features.fp2_max)
+                amplitudes.append(amp)
                 jaw_powers.append(features.jaw_power)
+                fp1_values.append(features.fp1_max)
+                fp2_values.append(features.fp2_max)
 
-            state.calibration_progress = (time.time() - start_time) / duration
+                # Log every 2 seconds
+                elapsed = time.time() - start_time
+                if elapsed - last_log_time >= 2.0:
+                    add_log(f"Progress {elapsed:.0f}s: FP1={features.fp1_max:.1f}uV, FP2={features.fp2_max:.1f}uV, Jaw={features.jaw_power:.0f}")
+                    last_log_time = elapsed
+
+            state.calibration_progress = min((time.time() - start_time) / duration, 0.99)
             time.sleep(0.2)
 
         # Calculate thresholds
@@ -428,6 +460,14 @@ def run_quick_calibration() -> dict:
             amp_std = np.std(amplitudes)
             jaw_mean = np.mean(jaw_powers)
             jaw_std = np.std(jaw_powers)
+            fp1_mean = np.mean(fp1_values)
+            fp2_mean = np.mean(fp2_values)
+
+            add_log(f"Collected {len(amplitudes)} samples", "info")
+            add_log(f"Baseline stats:", "info")
+            add_log(f"  Amplitude: mean={amp_mean:.1f}uV, std={amp_std:.1f}uV", "info")
+            add_log(f"  Jaw power: mean={jaw_mean:.0f}, std={jaw_std:.0f}", "info")
+            add_log(f"  FP1 mean={fp1_mean:.1f}uV, FP2 mean={fp2_mean:.1f}uV", "info")
 
             thresholds = {
                 'blink_threshold': float(amp_mean + 3.0 * amp_std),
@@ -437,6 +477,12 @@ def run_quick_calibration() -> dict:
                 'baseline_amplitude': float(amp_mean),
                 'baseline_jaw_power': float(jaw_mean),
             }
+
+            add_log(f"Calculated thresholds:", "success")
+            add_log(f"  Blink threshold: {thresholds['blink_threshold']:.1f}uV (3x std)", "success")
+            add_log(f"  Jaw threshold: {thresholds['jaw_threshold']:.0f} (2.5x std)", "success")
+            add_log(f"  Eye move threshold: {thresholds['eye_move_threshold']:.1f}uV (1.5x std)", "success")
+            add_log(f"  Lateral ratio: {thresholds['lateral_ratio']}", "success")
 
             # Update detector
             state.command_detector.update_thresholds(thresholds)
@@ -448,15 +494,59 @@ def run_quick_calibration() -> dict:
                 json.dump({
                     'timestamp': datetime.now().isoformat(),
                     'thresholds': thresholds,
+                    'stats': {
+                        'samples': len(amplitudes),
+                        'amp_mean': float(amp_mean),
+                        'amp_std': float(amp_std),
+                        'jaw_mean': float(jaw_mean),
+                        'jaw_std': float(jaw_std),
+                    }
                 }, f, indent=2)
 
+            add_log(f"Calibration saved to {wc_config.CALIBRATION_FILE}", "success")
+
+            # Mark complete - set progress to 100% and store result
+            state.calibration_progress = 1.0
+            state.calibration_phase = "complete"
+            state.calibration_result = {
+                "success": True,
+                "thresholds": thresholds,
+                "logs": state.calibration_logs
+            }
+
+            print("-" * 60)
+            print("[CALIBRATION] Complete!")
+            print("=" * 60 + "\n")
+
+            time.sleep(0.3)  # Give time for WebSocket to send the 100% update
             state.is_calibrating = False
             return {"success": True, "thresholds": thresholds}
 
+        # No data collected
+        add_log("Error: No data collected during calibration", "error")
+        state.calibration_progress = 1.0
+        state.calibration_phase = "failed"
+        state.calibration_result = {
+            "success": False,
+            "error": "No data collected",
+            "logs": state.calibration_logs
+        }
+        print("[CALIBRATION] Failed: No data collected\n")
+        time.sleep(0.3)
         state.is_calibrating = False
         return {"success": False, "error": "No data collected"}
 
     except Exception as e:
+        add_log(f"Error: {str(e)}", "error")
+        state.calibration_progress = 1.0
+        state.calibration_phase = "failed"
+        state.calibration_result = {
+            "success": False,
+            "error": str(e),
+            "logs": state.calibration_logs
+        }
+        print(f"[CALIBRATION] Failed: {str(e)}\n")
+        time.sleep(0.3)
         state.is_calibrating = False
         return {"success": False, "error": str(e)}
 
@@ -632,11 +722,15 @@ async def websocket_endpoint(websocket: WebSocket):
 
             # Send calibration progress if calibrating
             if state.is_calibrating:
-                await websocket.send_json({
+                msg = {
                     "type": "calibration_progress",
                     "phase": state.calibration_phase,
                     "progress": state.calibration_progress,
-                })
+                    "logs": state.calibration_logs[-10:] if state.calibration_logs else [],  # Last 10 logs
+                }
+                if state.calibration_result:
+                    msg["result"] = state.calibration_result
+                await websocket.send_json(msg)
 
             await asyncio.sleep(0.01)
 
