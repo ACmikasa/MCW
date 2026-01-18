@@ -1,6 +1,6 @@
 {
-  "ch1_threshold": 0.2,
-  "ch3_threshold": 0.2,
+  "ch1_threshold": 0.15,
+  "ch3_threshold": 0.15,
   "coupled_reduction": 0.5,
   "change_duration_sec": 0.1,
   "cooldown_sec": 0.5,

@@ -141,6 +141,12 @@ class EEGState:
         self.last_command_confidence = 0
         self.command_history = []
         self.total_commands = 0
+        
+        # ----- Arduino hold-to-run / keepalive state -----
+        self._active_action = "stop"           # latched: "forward" | "right" | "stop"
+        self._last_seen_action_time = 0.0      # last time forward/right was detected
+        self._last_arduino_cmd = "stop"        # last command sent to Arduino
+        self._last_arduino_send_time = 0.0     # last time we wrote serial
 
         # Calibration state
         self.is_calibrating = False
@@ -442,11 +448,7 @@ def detect_command() -> Optional[dict]:
                 print(f"Ch1: {f['fp1_pct_change']:6.1f}% | Ch3: {f['fp2_pct_change']:6.1f}%{cmd_str}")
                 state._last_delta_print = current_time
 
-        # Track last Arduino command to avoid spamming
-        if not hasattr(state, '_last_arduino_cmd'):
-            state._last_arduino_cmd = None
-
-        # Determine Arduino action based on command and obstacle detection
+        # ---------------- Determine Arduino action ----------------
         arduino_action = None
         is_blocked = False
 
@@ -458,30 +460,62 @@ def detect_command() -> Optional[dict]:
                 print("[ARDUINO] Forward BLOCKED by obstacle!")
             else:
                 arduino_action = 'forward'
+
         elif result.command == 'right':
             arduino_action = 'right'
+
         else:
-            # No command - stop motors
+            # No command - stop motors (but we will NOT spam stop repeatedly)
             arduino_action = 'stop'
 
-        # Send to Arduino (only if changed to avoid spamming serial)
-        if arduino.is_connected and arduino_action != state._last_arduino_cmd:
-            state._last_arduino_cmd = arduino_action
-            if arduino_action == 'forward':
-                arduino.forward()
-            elif arduino_action == 'right':
-                arduino.right()
-            elif arduino_action == 'stop':
-                arduino.stop()
+        # ---------------- Send to Arduino (KEEPALIVE while active) ----------------
+        # IMPORTANT: This supports "hold-to-run" Arduino logic.
+        # While forward/right is active, resend command at ~12.5 Hz (every 80 ms).
+        # ---------------- Hold-to-run latch + 0.5s tolerance + keepalive ----------------
+        now = time.time()
 
-        # Update state
+        RELEASE_TOL = 0.5          # seconds (gesture dropout tolerance before stopping)
+        KEEPALIVE_INTERVAL = 0.08  # seconds (resend rate while active)
+
+        # 1) Latch the active action while we see a valid command
+        if arduino_action in ("forward", "right"):
+            state._active_action = arduino_action
+            state._last_seen_action_time = now
+        else:
+            # Only stop if we haven't seen a command for RELEASE_TOL seconds
+            if (now - state._last_seen_action_time) >= RELEASE_TOL:
+                state._active_action = "stop"
+
+        # 2) Send to Arduino
+        if arduino.is_connected:
+            if state._active_action in ("forward", "right"):
+                should_send = (
+                    (state._active_action != state._last_arduino_cmd) or
+                    ((now - state._last_arduino_send_time) >= KEEPALIVE_INTERVAL)
+                )
+                if should_send:
+                    state._last_arduino_cmd = state._active_action
+                    state._last_arduino_send_time = now
+
+                    if state._active_action == "forward":
+                        arduino.forward()
+                    elif state._active_action == "right":
+                        arduino.right()
+
+            else:
+                # Stop ONCE when transitioning into stop
+                if state._last_arduino_cmd != "stop":
+                    state._last_arduino_cmd = "stop"
+                    state._last_arduino_send_time = now
+                    arduino.stop()
+
+        # ---------------- Update stats/history ----------------
         if result.command:
             state.last_command = result.command
             state.last_command_time = result.timestamp
             state.last_command_confidence = result.confidence
             state.total_commands += 1
 
-            # Add to history (keep last 50)
             state.command_history.append({
                 'command': result.command,
                 'confidence': result.confidence,
@@ -502,6 +536,7 @@ def detect_command() -> Optional[dict]:
     except Exception as e:
         print(f"Error in command detection: {e}")
         return None
+
 
 # -----------------------------------------------------------------------------
 # Calibration
