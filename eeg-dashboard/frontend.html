@@ -354,8 +354,20 @@
         .chart-container {
             display: flex;
             flex-direction: column;
-            overflow: hidden;
-            padding: 0; /* Override padding for chart container to let canvas hit edges or have its own header */
+            overflow-y: auto; /* Allow scrolling for the whole middle panel */
+            overflow-x: hidden;
+            padding: 0;
+            position: relative;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(255,255,255,0.1) transparent;
+        }
+
+        .chart-container::-webkit-scrollbar {
+            width: 8px;
+        }
+        .chart-container::-webkit-scrollbar-thumb {
+            background-color: rgba(255,255,255,0.2);
+            border-radius: 4px;
         }
 
         .chart-header {
@@ -363,8 +375,13 @@
             justify-content: space-between;
             align-items: center;
             padding: var(--space-md) var(--space-lg);
-            background: rgba(255, 255, 255, 0.03);
+            background: rgba(28, 28, 30, 0.85); /* Slightly more opaque for sticky */
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
             border-bottom: 1px solid var(--glass-border);
+            position: sticky;
+            top: 0;
+            z-index: 20;
         }
 
         .chart-header h2 {
@@ -393,11 +410,11 @@
         }
 
         .eeg-display {
-            flex: 1;
+            /* flex: 1;  Removed to allow auto-height */
             display: flex;
             flex-direction: column;
             min-height: 0;
-            overflow: hidden;
+            overflow: visible; /* Allow content to flow */
             position: relative;
         }
         
@@ -409,11 +426,12 @@
             width: 40px;
             background: linear-gradient(90deg, transparent, rgba(28,28,30,0.2));
             pointer-events: none;
+            z-index: 5;
         }
 
         .eeg-channels {
-            flex: 1;
-            overflow-y: auto;
+            /* flex: 1; Removed */
+            overflow-y: visible; /* Don't scroll internally */
             background: transparent; /* Let container bg show */
             padding-right: 2px; /* Prevent scrollbar overlap */
         }
