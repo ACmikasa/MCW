@@ -80,8 +80,8 @@ class CommandDetector:
         self.fp2_history = deque(maxlen=self.baseline_window)
 
         # Detection parameters (loaded from config) - separate thresholds per channel
-        self.ch1_threshold = settings.get('ch1_threshold', 0.2)  # Ch1/FP1 -> RIGHT
-        self.ch3_threshold = settings.get('ch3_threshold', 0.2)  # Ch3/FP2 -> LEFT
+        self.ch1_threshold = settings.get('ch1_threshold', 0.2)  # Ch1/FP1 -> LEFT
+        self.ch3_threshold = settings.get('ch3_threshold', 0.2)  # Ch3/FP2 -> RIGHT
         self.change_duration_sec = settings.get('change_duration_sec', 0.1)  # How long change must be sustained
         self.cooldown_sec = settings.get('cooldown_sec', 0.5)
 
@@ -92,7 +92,7 @@ class CommandDetector:
         self.fp1_change_start = None
         self.fp2_change_start = None
 
-        logger.info(f"CommandDetector initialized - Ch1={self.ch1_threshold*100:.0f}% (RIGHT), Ch3={self.ch3_threshold*100:.0f}% (LEFT), duration={self.change_duration_sec}s, cooldown={self.cooldown_sec}s")
+        logger.info(f"CommandDetector initialized - Ch1={self.ch1_threshold*100:.0f}% (LEFT), Ch3={self.ch3_threshold*100:.0f}% (RIGHT), duration={self.change_duration_sec}s, cooldown={self.cooldown_sec}s")
 
     def update_thresholds(self, calibration_data: Dict):
         """Update thresholds (kept for compatibility but not really used)."""
@@ -151,8 +151,8 @@ class CommandDetector:
         fp2_pct_change = abs(fp2_current - fp2_baseline) / (fp2_baseline + 1e-6)
 
         # Check if each channel exceeds its threshold (separate for left/right tuning)
-        fp1_above_threshold = fp1_pct_change >= self.ch1_threshold  # Ch1 -> RIGHT
-        fp2_above_threshold = fp2_pct_change >= self.ch3_threshold  # Ch3 -> LEFT
+        fp1_above_threshold = fp1_pct_change >= self.ch1_threshold  # Ch1 -> LEFT
+        fp2_above_threshold = fp2_pct_change >= self.ch3_threshold  # Ch3 -> RIGHT
 
         # Track how long each channel has been above threshold
         if fp1_above_threshold:
@@ -208,19 +208,19 @@ class CommandDetector:
         if fp1_triggered and fp2_triggered:
             command = "both"
             confidence = min(1.0, (fp1_pct_change + fp2_pct_change) / 2)
-            logger.info(f"BOTH: FP1 {fp1_pct_change*100:.1f}% for {fp1_duration:.2f}s, FP2 {fp2_pct_change*100:.1f}% for {fp2_duration:.2f}s")
+            logger.info(f"BOTH: Ch1 {fp1_pct_change*100:.1f}% for {fp1_duration:.2f}s, Ch3 {fp2_pct_change*100:.1f}% for {fp2_duration:.2f}s")
             # Reset change tracking
             self.fp1_change_start = None
             self.fp2_change_start = None
         elif fp1_triggered:
-            command = config.Command.RIGHT
+            command = config.Command.LEFT
             confidence = min(1.0, fp1_pct_change)
-            logger.info(f"RIGHT: FP1 changed {fp1_pct_change*100:.1f}% for {fp1_duration:.2f}s")
+            logger.info(f"LEFT: Ch1 changed {fp1_pct_change*100:.1f}% for {fp1_duration:.2f}s")
             self.fp1_change_start = None
         elif fp2_triggered:
-            command = config.Command.LEFT
+            command = config.Command.RIGHT
             confidence = min(1.0, fp2_pct_change)
-            logger.info(f"LEFT: FP2 changed {fp2_pct_change*100:.1f}% for {fp2_duration:.2f}s")
+            logger.info(f"RIGHT: Ch3 changed {fp2_pct_change*100:.1f}% for {fp2_duration:.2f}s")
             self.fp2_change_start = None
 
         if command:
