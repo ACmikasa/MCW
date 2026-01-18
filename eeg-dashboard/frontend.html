@@ -569,6 +569,77 @@
             margin-top: 0.25rem;
         }
 
+        /* Camera Feed Section (below EEG) */
+        .camera-feed-section {
+            background: linear-gradient(180deg, #12121a 0%, #0d0d14 100%);
+            border-radius: 12px;
+            padding: 1rem;
+            margin-top: 1rem;
+            border: 1px solid #2a2a4a;
+        }
+
+        .camera-feed-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.75rem;
+        }
+
+        .camera-feed-header h3 {
+            margin: 0;
+            font-size: 1rem;
+            color: #fff;
+        }
+
+        .vision-status-inline {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 0.85rem;
+        }
+
+        .vision-status-inline.clear {
+            background: rgba(46, 213, 115, 0.2);
+            color: #2ed573;
+        }
+
+        .vision-status-inline.blocked {
+            background: rgba(255, 71, 87, 0.2);
+            color: #ff4757;
+        }
+
+        .vision-icon-inline {
+            font-size: 1.1rem;
+        }
+
+        .camera-feed-content {
+            display: flex;
+            gap: 1rem;
+            align-items: flex-start;
+        }
+
+        .camera-video {
+            width: 320px;
+            height: 240px;
+            border-radius: 8px;
+            border: 2px solid #2a2a4a;
+            background: #000;
+            object-fit: cover;
+        }
+
+        .vision-message-inline {
+            flex: 1;
+            padding: 0.75rem;
+            background: #1a1a2e;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            color: #aaa;
+            min-height: 60px;
+        }
+
         .delta-log {
             max-height: 120px;
             overflow-y: auto;
@@ -849,6 +920,21 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Camera Feed Section -->
+            <div id="camera-feed-section" class="camera-feed-section" style="display: none;">
+                <div class="camera-feed-header">
+                    <h3>Camera Feed</h3>
+                    <div id="vision-status-inline" class="vision-status-inline">
+                        <span class="vision-icon-inline" id="vision-icon-inline">--</span>
+                        <span class="vision-text-inline" id="vision-text-inline">Waiting...</span>
+                    </div>
+                </div>
+                <div class="camera-feed-content">
+                    <video id="overshoot-video" autoplay muted playsinline class="camera-video"></video>
+                    <div class="vision-message-inline" id="vision-message-inline"></div>
+                </div>
+            </div>
         </main>
 
         <!-- Right Panel: Wheelchair Control -->
@@ -860,16 +946,6 @@
                     <input type="checkbox" id="vision-toggle">
                     <span class="slider" style="font-size: 0.7rem;"></span>
                 </label>
-                <div id="video-container" style="display: none; margin-top: 0.5rem;">
-                    <video id="overshoot-video" autoplay muted playsinline style="width: 100%; border-radius: 8px; border: 2px solid #2a2a4a;"></video>
-                </div>
-                <div id="vision-status" class="vision-status" style="display: none;">
-                    <div class="vision-indicator" id="vision-indicator">
-                        <span class="vision-icon" id="vision-icon">--</span>
-                        <span class="vision-text" id="vision-text">Checking...</span>
-                    </div>
-                    <div class="vision-message" id="vision-message"></div>
-                </div>
             </div>
 
             <div class="control-section">
@@ -1065,13 +1141,12 @@
             // Overshoot Vision elements
             overshootApiKey: document.getElementById('overshoot-api-key'),
             visionToggle: document.getElementById('vision-toggle'),
-            videoContainer: document.getElementById('video-container'),
+            cameraFeedSection: document.getElementById('camera-feed-section'),
             overshootVideo: document.getElementById('overshoot-video'),
-            visionStatus: document.getElementById('vision-status'),
-            visionIndicator: document.getElementById('vision-indicator'),
-            visionIcon: document.getElementById('vision-icon'),
-            visionText: document.getElementById('vision-text'),
-            visionMessage: document.getElementById('vision-message'),
+            visionStatusInline: document.getElementById('vision-status-inline'),
+            visionIconInline: document.getElementById('vision-icon-inline'),
+            visionTextInline: document.getElementById('vision-text-inline'),
+            visionMessageInline: document.getElementById('vision-message-inline'),
         };
 
         // Overshoot Vision state
@@ -1423,10 +1498,10 @@
                              lowerText.includes('barrier') ||
                              lowerText.includes('yes');
 
-            elements.visionIndicator.className = 'vision-indicator ' + (isBlocked ? 'blocked' : 'clear');
-            elements.visionIcon.textContent = isBlocked ? '⛔' : '✓';
-            elements.visionText.textContent = isBlocked ? 'OBSTACLE' : 'CLEAR';
-            elements.visionMessage.textContent = resultText.substring(0, 100);
+            elements.visionStatusInline.className = 'vision-status-inline ' + (isBlocked ? 'blocked' : 'clear');
+            elements.visionIconInline.textContent = isBlocked ? '⛔' : '✓';
+            elements.visionTextInline.textContent = isBlocked ? 'OBSTACLE' : 'CLEAR';
+            elements.visionMessageInline.textContent = resultText;
 
             // Log detection
             if (isBlocked) {
@@ -1461,8 +1536,7 @@
                 const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
                 elements.overshootVideo.srcObject = stream;
 
-                elements.videoContainer.style.display = 'block';
-                elements.visionStatus.style.display = 'block';
+                elements.cameraFeedSection.style.display = 'block';
                 visionEnabled = true;
                 log('Overshoot Vision started', 'success');
 
@@ -1486,8 +1560,7 @@
                 elements.overshootVideo.srcObject = null;
             }
 
-            elements.videoContainer.style.display = 'none';
-            elements.visionStatus.style.display = 'none';
+            elements.cameraFeedSection.style.display = 'none';
             visionEnabled = false;
             log('Overshoot Vision stopped', 'info');
         }
