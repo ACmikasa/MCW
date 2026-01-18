@@ -253,11 +253,9 @@ class CommandDetector:
                 output_command = raw_command
                 self.last_output_command = raw_command
                 self.last_command_time = timestamp
-                logger.info(f"{raw_command.upper()}: detected (new command)")
             else:
                 # Same command as before - suppress it (dedupe)
                 features['status'] = 'dedupe_suppressed'
-                logger.debug(f"{raw_command.upper()}: suppressed (same as last)")
         else:
             # No command detected - signal dropped
             if self.last_output_command is not None:
@@ -267,7 +265,6 @@ class CommandDetector:
 
                 # After enough silence, reset so same command can trigger again
                 if (timestamp - self.command_end_time) >= self.dedupe_reset_sec:
-                    logger.debug(f"Dedupe reset after {self.dedupe_reset_sec}s silence")
                     self.last_output_command = None
                     self.command_end_time = 0.0
 
