@@ -84,7 +84,7 @@ class ArduinoController:
         with self.lock:
             try:
                 self.serial.write((cmd + "\n").encode("utf-8"))
-                self.serial.flush()
+                # Note: removed flush() - it blocks and causes lag
                 return True
             except Exception as e:
                 print(f"[ARDUINO] Send error: {e}")
