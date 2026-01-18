@@ -85,7 +85,7 @@ from arduino_control import arduino, ArduinoController
 
 BOARD_ID = BoardIds.CYTON_DAISY_BOARD  # Board ID = 2 for Cyton + Daisy (16 channels)
 BATCH_SIZE = 25  # Samples per WebSocket message (~200ms at 125 Hz)
-WS_UPDATE_INTERVAL = 0.1  # Seconds between WebSocket updates
+WS_UPDATE_INTERVAL = 0.2  # Seconds between WebSocket updates (was 0.1, increased to reduce lag)
 
 # Wheelchair control channels (from config)
 FP1_CHANNEL = wc_config.FP1_CHANNEL  # 9
@@ -1033,34 +1033,37 @@ async def websocket_endpoint(websocket: WebSocket):
             if state.is_streaming:
                 data = get_board_data()
                 if data is not None and data.shape[1] > 0:
-                    # Detect wheelchair command
+                    # Detect wheelchair command (uses full data)
                     command_result = detect_command()
 
-                    # Write to CSV if enabled
+                    # Write to CSV if enabled (full rate)
                     if state.csv_enabled:
                         cmd = command_result['command'] if command_result else None
                         write_csv_data(data, cmd)
 
-                    # Send EEG data to frontend
+                    # Downsample for frontend display (take every 2nd sample)
+                    display_data = data[:, ::2] if data.shape[1] > 4 else data
+
+                    # Send EEG data to frontend (downsampled)
                     eeg_data = []
                     for ch_idx in state.eeg_channels:
-                        eeg_data.append(data[ch_idx, :].tolist())
+                        eeg_data.append(display_data[ch_idx, :].tolist())
 
-                    # Send accelerometer data
+                    # Send accelerometer data (downsampled)
                     accel_data = []
                     for ch_idx in state.accel_channels:
-                        accel_data.append(data[ch_idx, :].tolist())
+                        accel_data.append(display_data[ch_idx, :].tolist())
 
                     # Calculate elapsed time
                     elapsed = time.time() - state.start_time if state.start_time else 0
 
-                    # Build response
+                    # Build response (using downsampled display_data for timestamps too)
                     response = {
                         "type": "data",
                         "eeg": eeg_data,
                         "accel": accel_data,
-                        "timestamps": data[state.timestamp_channel, :].tolist(),
-                        "sample_indices": data[0, :].tolist(),
+                        "timestamps": display_data[state.timestamp_channel, :].tolist(),
+                        "sample_indices": display_data[0, :].tolist(),
                         "stats": {
                             "total_samples": state.total_samples,
                             "dropped_packets": state.dropped_packets,
