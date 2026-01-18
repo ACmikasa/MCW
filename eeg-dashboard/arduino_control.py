@@ -20,7 +20,6 @@ class ArduinoController:
         self.port: Optional[str] = None
         self.is_connected = False
         self.lock = threading.Lock()
-        self._last_cmd = None  # Track last command to avoid redundant prints
 
     def list_ports(self) -> list:
         """List available serial ports."""
@@ -93,21 +92,15 @@ class ArduinoController:
     # ===================== High-level commands =====================
 
     def forward(self) -> bool:
-        if self._last_cmd != "F":
-            print("[ARDUINO] -> FORWARD")
-            self._last_cmd = "F"
+        print("[ARDUINO] -> FORWARD")
         return self._send("F")
 
     def right(self) -> bool:
-        if self._last_cmd != "R":
-            print("[ARDUINO] -> RIGHT")
-            self._last_cmd = "R"
+        print("[ARDUINO] -> RIGHT")
         return self._send("R")
 
     def stop(self) -> bool:
-        if self._last_cmd != "S":
-            print("[ARDUINO] -> STOP")
-            self._last_cmd = "S"
+        print("[ARDUINO] -> STOP")
         return self._send("S")
 
     def get_status(self) -> dict:
