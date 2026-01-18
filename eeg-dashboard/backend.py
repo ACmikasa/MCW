@@ -452,12 +452,14 @@ def detect_command() -> Optional[dict]:
         arduino_action = None
         is_blocked = False
 
+        # Track if we need to send obstacle alert to frontend
+        obstacle_alert = False
+
         if result.command == 'forward' or result.command == 'both':
             # Check if blocked by vision
             if state.vision_enabled and state.object_detected:
                 is_blocked = True
                 arduino_action = 'stop'
-                print("[ARDUINO] Forward BLOCKED by obstacle!")
             else:
                 arduino_action = 'forward'
 
@@ -468,17 +470,28 @@ def detect_command() -> Optional[dict]:
             # No command - stop motors (but we will NOT spam stop repeatedly)
             arduino_action = 'stop'
 
+        # ---------------- OBSTACLE OVERRIDE ----------------
+        # If obstacle detected while moving forward, IMMEDIATELY stop (override latch)
+        if state.vision_enabled and state.object_detected and state._active_action == "forward":
+            is_blocked = True
+            arduino_action = 'stop'
+
         # ---------------- Send to Arduino (KEEPALIVE while active) ----------------
-        # IMPORTANT: This supports "hold-to-run" Arduino logic.
-        # While forward/right is active, resend command at ~12.5 Hz (every 80 ms).
-        # ---------------- Hold-to-run latch + 0.5s tolerance + keepalive ----------------
         now = time.time()
 
         RELEASE_TOL = 0.5          # seconds (gesture dropout tolerance before stopping)
         KEEPALIVE_INTERVAL = 0.08  # seconds (resend rate while active)
 
         # 1) Latch the active action while we see a valid command
-        if arduino_action in ("forward", "right"):
+        #    BUT if blocked by obstacle, force stop immediately
+        if is_blocked:
+            # OBSTACLE: Force immediate stop, bypass latch tolerance
+            if state._active_action != "stop":
+                print(f"[OBSTACLE] ⚠ EMERGENCY STOP - obstacle detected while moving!")
+                obstacle_alert = True
+            state._active_action = "stop"
+            state._last_seen_action_time = 0  # Reset so we don't resume accidentally
+        elif arduino_action in ("forward", "right"):
             state._active_action = arduino_action
             state._last_seen_action_time = now
         else:
@@ -509,7 +522,10 @@ def detect_command() -> Optional[dict]:
             else:
                 # Stop ONCE when transitioning into stop
                 if state._last_arduino_cmd != "stop":
-                    print(f"[MOVE] ■ STOPPED (was {state._last_arduino_cmd})")
+                    if is_blocked:
+                        print(f"[MOVE] ⛔ BLOCKED by obstacle!")
+                    else:
+                        print(f"[MOVE] ■ STOPPED (was {state._last_arduino_cmd})")
                     state._last_arduino_cmd = "stop"
                     state._last_arduino_send_time = now
                     arduino.stop()
@@ -536,6 +552,7 @@ def detect_command() -> Optional[dict]:
             'cooldown_remaining': state.command_detector.get_cooldown_remaining(),
             'arduino_action': arduino_action,
             'is_blocked': is_blocked,
+            'obstacle_alert': obstacle_alert,  # True when we just blocked due to obstacle
         }
 
     except Exception as e:
