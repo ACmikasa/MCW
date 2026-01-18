@@ -878,19 +878,19 @@
             </div>
 
             <div class="control-section">
-                <h3>Command History</h3>
-                <div class="command-history" id="command-history">
-                    <div style="color: #666; font-size: 0.8rem; text-align: center; padding: 1rem;">
-                        No commands yet
+                <h3>Delta Log (Ch1 / Ch3)</h3>
+                <div class="delta-log" id="delta-log">
+                    <div style="color: #666; font-size: 0.8rem; text-align: center; padding: 0.5rem;">
+                        Waiting for data...
                     </div>
                 </div>
             </div>
 
             <div class="control-section">
-                <h3>Delta Log (Ch1 / Ch3)</h3>
-                <div class="delta-log" id="delta-log">
-                    <div style="color: #666; font-size: 0.8rem; text-align: center; padding: 0.5rem;">
-                        Waiting for data...
+                <h3>Command History</h3>
+                <div class="command-history" id="command-history">
+                    <div style="color: #666; font-size: 0.8rem; text-align: center; padding: 1rem;">
+                        No commands yet
                     </div>
                 </div>
             </div>
@@ -1010,7 +1010,13 @@
             }
         }
 
+        let deltaLogInitialized = false;
         function addDeltaLog(ch1Pct, ch3Pct, cmd) {
+            // Clear "Waiting for data..." on first entry
+            if (!deltaLogInitialized) {
+                elements.deltaLog.innerHTML = '';
+                deltaLogInitialized = true;
+            }
             const entry = document.createElement('div');
             entry.className = 'delta-entry';
             const cmdStr = cmd ? `<span class="cmd">${cmd}</span>` : '';
@@ -1215,6 +1221,9 @@
                     ctx.fillRect(0, 0, width, height);
                 }
             }
+            // Reset delta log
+            deltaLogInitialized = false;
+            elements.deltaLog.innerHTML = '<div style="color: #666; font-size: 0.8rem; text-align: center; padding: 0.5rem;">Waiting for data...</div>';
             log('Chart cleared', 'info');
         }
 
@@ -1381,6 +1390,11 @@
                         clearChart();
                         commandHistory = [];
                         updateCommandHistory();
+                        // Auto-enable wheelchair when streaming starts
+                        if (!wheelchairEnabled) {
+                            elements.wheelchairToggle.checked = true;
+                            ws.send(JSON.stringify({ command: 'wheelchair_enable' }));
+                        }
                     }
                     break;
 
