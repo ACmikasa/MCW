@@ -26,15 +26,16 @@ def load_detection_settings() -> Dict:
     """Load detection settings from JSON config file."""
     config_file = Path("detection_multipliers.json")
     defaults = {
-        "spike_threshold": 1.5,
-        "min_spike_diff": 0.2,
-        "cooldown_sec": 0.5,
+        "spike_threshold": 0.2,       # 20% change to trigger
+        "change_duration_sec": 0.1,   # How long change must be sustained
+        "cooldown_sec": 0.5,          # Time between commands
     }
 
     if config_file.exists():
         try:
             with open(config_file, 'r') as f:
                 loaded = json.load(f)
+                # Update defaults with loaded values
                 for key in defaults:
                     if key in loaded:
                         defaults[key] = loaded[key]
@@ -181,8 +182,8 @@ class CommandDetector:
             'fp2_pct_change': float(fp2_pct_change * 100),
             'fp1_duration': float(fp1_duration),
             'fp2_duration': float(fp2_duration),
-            'fp1_triggered': fp1_triggered,
-            'fp2_triggered': fp2_triggered,
+            'fp1_triggered': bool(fp1_triggered),  # Convert numpy bool to Python bool
+            'fp2_triggered': bool(fp2_triggered),
             'threshold_pct': float(self.spike_threshold * 100),
             'duration_required': float(self.change_duration_sec),
         }
