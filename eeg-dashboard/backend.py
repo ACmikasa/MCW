@@ -1219,7 +1219,8 @@ async def handle_command(websocket: WebSocket, message: dict):
             await websocket.send_json({"type": "arduino_status", "success": False, "error": "No port specified"})
         else:
             result = arduino.connect(port)
-            await websocket.send_json({"type": "arduino_status", **result, "connected": result.get("success", False)})
+            # Always report actual connection state, even if "Already connected" error occurred
+            await websocket.send_json({"type": "arduino_status", **result, "connected": arduino.is_connected})
 
     elif cmd == "arduino_disconnect":
         result = arduino.disconnect()

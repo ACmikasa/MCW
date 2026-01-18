@@ -234,6 +234,12 @@
              background-size: 1em;
         }
 
+        /* Fix for dropdown option visibility */
+        option {
+            background-color: #1c1c1e; /* Dark background for options */
+            color: #ffffff;
+        }
+
         .port-select:focus, .port-input:focus, select:focus {
             background: rgba(0, 0, 0, 0.3);
             border-color: var(--accent-blue);
@@ -721,6 +727,23 @@
         }
         .vision-status-inline.clear { color: var(--accent-green); background: rgba(48, 209, 88, 0.15); }
         .vision-status-inline.blocked { color: var(--accent-red); background: rgba(255, 69, 58, 0.15); }
+
+        .vision-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.4rem 0.8rem;
+            border-radius: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+        .vision-indicator.clear {
+            background: rgba(48, 209, 88, 0.15);
+            color: var(--accent-green);
+            box-shadow: 0 0 10px rgba(48, 209, 88, 0.1);
+        }
 
         /* Bars */
         .calibration-bar, .cooldown-bar {
