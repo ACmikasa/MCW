@@ -1586,28 +1586,36 @@
                 resultText = JSON.stringify(result);
             }
 
-            // Try to parse as JSON for structured response
+            // Parse the response - handle "Yes"/"No" or JSON
             let isBlocked = false;
-            try {
-                // Extract JSON from the response (might have extra text)
-                const jsonMatch = resultText.match(/\{[^}]*"blocked"\s*:\s*(true|false)[^}]*\}/i);
-                if (jsonMatch) {
-                    const parsed = JSON.parse(jsonMatch[0]);
-                    isBlocked = parsed.blocked === true;
-                } else if (resultText.includes('"blocked": true') || resultText.includes('"blocked":true')) {
-                    isBlocked = true;
-                } else if (resultText.includes('"blocked": false') || resultText.includes('"blocked":false')) {
-                    isBlocked = false;
-                } else {
-                    // Fallback to text analysis
-                    const lowerText = resultText.toLowerCase();
-                    isBlocked = (lowerText.includes('true') || lowerText.includes('yes') || lowerText.includes('obstacle')) &&
-                               !(lowerText.includes('false') || lowerText.includes('no obstacle'));
+            const trimmedText = resultText.trim().toLowerCase();
+
+            // Check for simple Yes/No responses first
+            if (trimmedText === 'yes' || trimmedText === 'yes.' || trimmedText.startsWith('yes,') || trimmedText.startsWith('yes ')) {
+                isBlocked = true;
+            } else if (trimmedText === 'no' || trimmedText === 'no.' || trimmedText.startsWith('no,') || trimmedText.startsWith('no ')) {
+                isBlocked = false;
+            } else {
+                // Try JSON parsing
+                try {
+                    const jsonMatch = resultText.match(/\{[^}]*"blocked"\s*:\s*(true|false)[^}]*\}/i);
+                    if (jsonMatch) {
+                        const parsed = JSON.parse(jsonMatch[0]);
+                        isBlocked = parsed.blocked === true;
+                    } else if (resultText.includes('"blocked": true') || resultText.includes('"blocked":true')) {
+                        isBlocked = true;
+                    } else {
+                        // Fallback: check if "yes" appears before "no"
+                        const yesIndex = trimmedText.indexOf('yes');
+                        const noIndex = trimmedText.indexOf('no');
+                        if (yesIndex !== -1 && (noIndex === -1 || yesIndex < noIndex)) {
+                            isBlocked = true;
+                        }
+                    }
+                } catch (e) {
+                    // Last resort text check
+                    isBlocked = trimmedText.includes('yes') && !trimmedText.startsWith('no');
                 }
-            } catch (e) {
-                // Fallback to text analysis
-                const lowerText = resultText.toLowerCase();
-                isBlocked = lowerText.includes('true') || lowerText.includes('blocked": true');
             }
 
             // Update global obstacle state
@@ -1657,7 +1665,7 @@
                 overshootVision = new RealtimeVision({
                     apiUrl: 'https://cluster1.overshoot.ai/api/v0.2',
                     apiKey: apiKey,
-                    prompt: 'You are an obstacle detector for a wheelchair. Look at the image and determine if there is an obstacle blocking forward movement within 2 meters. Respond with ONLY valid JSON: {"blocked": true} or {"blocked": false}',
+                    prompt: 'Is there an obstacle blocking forward movement within 2 meters? Answer only YES or NO.',
                     source: { type: 'camera', cameraFacing: 'environment' },
                     onResult: (result) => {
                         console.log('Overshoot result:', result);
