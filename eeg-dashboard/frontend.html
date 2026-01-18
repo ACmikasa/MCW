@@ -865,14 +865,6 @@
                     <option value="">Select serial port...</option>
                 </select>
                 <input type="text" id="port-input" class="port-input" placeholder="Or enter port manually...">
-                <div style="margin: 0.5rem 0;">
-                    <label style="font-size: 0.75rem; color: #666;">Sampling Rate:</label>
-                    <select id="sampling-rate-select" class="port-select" style="margin-top: 0.25rem;">
-                        <option value="250">250 Hz (default)</option>
-                        <option value="125">125 Hz (less lag)</option>
-                        <option value="62">62 Hz (low power)</option>
-                    </select>
-                </div>
                 <button id="refresh-ports" class="btn btn-secondary btn-small">Refresh Ports</button>
                 <button id="connect-btn" class="btn btn-primary">Connect</button>
                 <button id="disconnect-btn" class="btn btn-danger" disabled>Disconnect</button>
@@ -1194,7 +1186,6 @@
             wheelchairStatusText: document.getElementById('wheelchair-status-text'),
             portSelect: document.getElementById('port-select'),
             portInput: document.getElementById('port-input'),
-            samplingRateSelect: document.getElementById('sampling-rate-select'),
             refreshPortsBtn: document.getElementById('refresh-ports'),
             connectBtn: document.getElementById('connect-btn'),
             disconnectBtn: document.getElementById('disconnect-btn'),
@@ -2048,9 +2039,8 @@
         elements.connectBtn.onclick = () => {
             const port = elements.portInput.value || elements.portSelect.value;
             if (!port) { log('Please select a port', 'error'); return; }
-            const samplingRate = parseInt(elements.samplingRateSelect.value) || 250;
-            log(`Connecting to ${port} at ${samplingRate} Hz...`, 'info');
-            ws.send(JSON.stringify({ command: 'connect', port, sampling_rate: samplingRate }));
+            log(`Connecting to ${port}...`, 'info');
+            ws.send(JSON.stringify({ command: 'connect', port }));
         };
 
         elements.disconnectBtn.onclick = () => ws.send(JSON.stringify({ command: 'disconnect' }));

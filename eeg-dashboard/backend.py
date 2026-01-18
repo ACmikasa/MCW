@@ -120,8 +120,6 @@ class EEGState:
 
         # Board info (populated on connect)
         self.sampling_rate = 0
-        self.target_sampling_rate = 250  # For downsampling
-        self.downsample_counter = 0      # Counter for skipping samples
         self.eeg_channels = []
         self.accel_channels = []
         self.timestamp_channel = 0
@@ -214,15 +212,12 @@ def detect_serial_ports() -> list[str]:
 # BrainFlow Board Management
 # -----------------------------------------------------------------------------
 
-def connect_board(serial_port: str, target_sampling_rate: int = 250) -> dict:
+def connect_board(serial_port: str) -> dict:
     """Connect to the OpenBCI Cyton + Daisy board."""
     global state
 
     if state.is_connected:
         return {"success": False, "error": "Already connected"}
-
-    # Store target rate for downsampling
-    state.target_sampling_rate = target_sampling_rate
 
     try:
         # Enable BrainFlow logging for debugging
@@ -270,11 +265,6 @@ def connect_board(serial_port: str, target_sampling_rate: int = 250) -> dict:
         state.accel_channels = BoardShim.get_accel_channels(BOARD_ID)
         state.timestamp_channel = BoardShim.get_timestamp_channel(BOARD_ID)
         state.num_channels = len(state.eeg_channels)
-
-        # Calculate effective rate after downsampling
-        downsample_ratio = max(1, state.sampling_rate // state.target_sampling_rate)
-        effective_rate = state.sampling_rate // downsample_ratio
-        print(f"[BOARD] Hardware rate: {state.sampling_rate} Hz, Target: {state.target_sampling_rate} Hz, Effective: {effective_rate} Hz (1:{downsample_ratio})")
 
         # Initialize wheelchair control components
         state.signal_processor = SignalProcessor(state.sampling_rate)
@@ -1043,19 +1033,13 @@ async def websocket_endpoint(websocket: WebSocket):
             if state.is_streaming:
                 data = get_board_data()
                 if data is not None and data.shape[1] > 0:
-                    # Detect wheelchair command (always, regardless of downsampling)
+                    # Detect wheelchair command
                     command_result = detect_command()
 
-                    # Write to CSV if enabled (full rate)
+                    # Write to CSV if enabled
                     if state.csv_enabled:
                         cmd = command_result['command'] if command_result else None
                         write_csv_data(data, cmd)
-
-                    # Downsample for frontend if target rate is lower than hardware rate
-                    downsample_ratio = max(1, state.sampling_rate // state.target_sampling_rate)
-                    if downsample_ratio > 1:
-                        # Take every Nth sample
-                        data = data[:, ::downsample_ratio]
 
                     # Send EEG data to frontend
                     eeg_data = []
@@ -1140,11 +1124,10 @@ async def handle_command(websocket: WebSocket, message: dict):
 
     if cmd == "connect":
         port = message.get("port")
-        sampling_rate = message.get("sampling_rate", 250)
         if not port:
             await websocket.send_json({"type": "error", "error": "No port specified"})
             return
-        result = connect_board(port, sampling_rate)
+        result = connect_board(port)
         await websocket.send_json({"type": "connect_result", **result})
 
     elif cmd == "disconnect":
