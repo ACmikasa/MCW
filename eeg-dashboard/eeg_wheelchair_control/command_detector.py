@@ -26,7 +26,8 @@ def load_detection_settings() -> Dict:
     """Load detection settings from JSON config file."""
     config_file = Path("detection_multipliers.json")
     defaults = {
-        "spike_threshold": 0.2,       # 20% change to trigger
+        "ch1_threshold": 0.2,         # 20% change to trigger RIGHT
+        "ch3_threshold": 0.2,         # 20% change to trigger LEFT
         "change_duration_sec": 0.1,   # How long change must be sustained
         "cooldown_sec": 0.5,          # Time between commands
     }
@@ -78,8 +79,9 @@ class CommandDetector:
         self.fp1_history = deque(maxlen=self.baseline_window)
         self.fp2_history = deque(maxlen=self.baseline_window)
 
-        # Detection parameters (loaded from config)
-        self.spike_threshold = settings.get('spike_threshold', 0.2)  # 20% change
+        # Detection parameters (loaded from config) - separate thresholds per channel
+        self.ch1_threshold = settings.get('ch1_threshold', 0.2)  # Ch1/FP1 -> RIGHT
+        self.ch3_threshold = settings.get('ch3_threshold', 0.2)  # Ch3/FP2 -> LEFT
         self.change_duration_sec = settings.get('change_duration_sec', 0.1)  # How long change must be sustained
         self.cooldown_sec = settings.get('cooldown_sec', 0.5)
 
@@ -90,7 +92,7 @@ class CommandDetector:
         self.fp1_change_start = None
         self.fp2_change_start = None
 
-        logger.info(f"CommandDetector initialized - threshold={self.spike_threshold*100:.0f}%, duration={self.change_duration_sec}s, cooldown={self.cooldown_sec}s")
+        logger.info(f"CommandDetector initialized - Ch1={self.ch1_threshold*100:.0f}% (RIGHT), Ch3={self.ch3_threshold*100:.0f}% (LEFT), duration={self.change_duration_sec}s, cooldown={self.cooldown_sec}s")
 
     def update_thresholds(self, calibration_data: Dict):
         """Update thresholds (kept for compatibility but not really used)."""
@@ -148,9 +150,9 @@ class CommandDetector:
         fp1_pct_change = abs(fp1_current - fp1_baseline) / (fp1_baseline + 1e-6)
         fp2_pct_change = abs(fp2_current - fp2_baseline) / (fp2_baseline + 1e-6)
 
-        # Check if each channel exceeds threshold
-        fp1_above_threshold = fp1_pct_change >= self.spike_threshold
-        fp2_above_threshold = fp2_pct_change >= self.spike_threshold
+        # Check if each channel exceeds its threshold (separate for left/right tuning)
+        fp1_above_threshold = fp1_pct_change >= self.ch1_threshold  # Ch1 -> RIGHT
+        fp2_above_threshold = fp2_pct_change >= self.ch3_threshold  # Ch3 -> LEFT
 
         # Track how long each channel has been above threshold
         if fp1_above_threshold:
@@ -184,7 +186,8 @@ class CommandDetector:
             'fp2_duration': float(fp2_duration),
             'fp1_triggered': bool(fp1_triggered),  # Convert numpy bool to Python bool
             'fp2_triggered': bool(fp2_triggered),
-            'threshold_pct': float(self.spike_threshold * 100),
+            'ch1_threshold_pct': float(self.ch1_threshold * 100),  # RIGHT threshold
+            'ch3_threshold_pct': float(self.ch3_threshold * 100),  # LEFT threshold
             'duration_required': float(self.change_duration_sec),
         }
 

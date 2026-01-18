@@ -1,6 +1,7 @@
 {
-  "spike_threshold": 0.2,
+  "ch1_threshold": 0.2,
+  "ch3_threshold": 0.2,
   "change_duration_sec": 0.1,
   "cooldown_sec": 0.5,
-  "_comment": "spike_threshold: % change to trigger (0.2 = 20%). change_duration_sec: how long the change must last. cooldown_sec: time between commands."
+  "_comment": "ch1_threshold: % change for RIGHT (0.2 = 20%). ch3_threshold: % change for LEFT. change_duration_sec: how long the change must last. cooldown_sec: time between commands."
 }
