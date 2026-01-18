@@ -523,6 +523,40 @@
             overflow-y: auto;
         }
 
+        .delta-log {
+            max-height: 120px;
+            overflow-y: auto;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 0.75rem;
+            background: #0a0a0f;
+            border-radius: 6px;
+            padding: 0.5rem;
+        }
+
+        .delta-entry {
+            padding: 0.2rem 0;
+            border-bottom: 1px solid #1a1a2e;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .delta-entry:last-child {
+            border-bottom: none;
+        }
+
+        .delta-entry .ch1 {
+            color: #ff6b6b;
+        }
+
+        .delta-entry .ch3 {
+            color: #ffd43b;
+        }
+
+        .delta-entry .cmd {
+            color: #2ed573;
+            font-weight: bold;
+        }
+
         .history-item {
             display: flex;
             justify-content: space-between;
@@ -851,6 +885,15 @@
                     </div>
                 </div>
             </div>
+
+            <div class="control-section">
+                <h3>Delta Log (Ch1 / Ch3)</h3>
+                <div class="delta-log" id="delta-log">
+                    <div style="color: #666; font-size: 0.8rem; text-align: center; padding: 0.5rem;">
+                        Waiting for data...
+                    </div>
+                </div>
+            </div>
         </aside>
     </div>
 
@@ -946,7 +989,12 @@
             statCommands: document.getElementById('stat-commands'),
             statLastCmd: document.getElementById('stat-last-cmd'),
             commandHistoryEl: document.getElementById('command-history'),
+            deltaLog: document.getElementById('delta-log'),
         };
+
+        // Delta log state
+        let lastDeltaLogTime = 0;
+        const DELTA_LOG_INTERVAL = 500; // Log every 500ms
 
         // =====================================================================
         // Logging
@@ -959,6 +1007,18 @@
             elements.logPanel.insertBefore(entry, elements.logPanel.firstChild);
             while (elements.logPanel.children.length > 50) {
                 elements.logPanel.removeChild(elements.logPanel.lastChild);
+            }
+        }
+
+        function addDeltaLog(ch1Pct, ch3Pct, cmd) {
+            const entry = document.createElement('div');
+            entry.className = 'delta-entry';
+            const cmdStr = cmd ? `<span class="cmd">${cmd}</span>` : '';
+            entry.innerHTML = `<span class="ch1">Ch1: ${ch1Pct.toFixed(1)}%</span><span class="ch3">Ch3: ${ch3Pct.toFixed(1)}%</span>${cmdStr}`;
+            elements.deltaLog.insertBefore(entry, elements.deltaLog.firstChild);
+            // Keep max 20 entries
+            while (elements.deltaLog.children.length > 20) {
+                elements.deltaLog.removeChild(elements.deltaLog.lastChild);
             }
         }
 
@@ -1199,15 +1259,24 @@
             const cooldownPercent = Math.min(100, (cooldown / 1.0) * 100);
             elements.cooldownBar.style.width = `${cooldownPercent}%`;
 
-            // Update features
-            elements.featureFp1.textContent = features.fp1_max ? features.fp1_max.toFixed(1) : '--';
-            elements.featureFp2.textContent = features.fp2_max ? features.fp2_max.toFixed(1) : '--';
+            // Update features display
+            const fp1Pct = features.fp1_pct_change;
+            const fp2Pct = features.fp2_pct_change;
+            elements.featureFp1.textContent = fp1Pct !== undefined ? `${fp1Pct.toFixed(1)}%` : '--';
+            elements.featureFp2.textContent = fp2Pct !== undefined ? `${fp2Pct.toFixed(1)}%` : '--';
             elements.featureJaw.textContent = features.jaw_power ? features.jaw_power.toFixed(0) : '--';
             elements.featureQuality.textContent = features.signal_quality ? `${(features.signal_quality * 100).toFixed(0)}%` : '--';
 
-            // Highlight FP1/FP2 based on ratio
-            elements.fp1Card.classList.toggle('highlight', features.fp1_fp2_ratio > 1.3);
-            elements.fp2Card.classList.toggle('highlight', features.fp2_fp1_ratio > 1.3);
+            // Log deltas every 0.5 seconds
+            const now = Date.now();
+            if (fp1Pct !== undefined && fp2Pct !== undefined && (now - lastDeltaLogTime >= DELTA_LOG_INTERVAL || cmd)) {
+                lastDeltaLogTime = now;
+                addDeltaLog(fp1Pct, fp2Pct, cmd);
+            }
+
+            // Highlight FP1/FP2 based on spike
+            elements.fp1Card.classList.toggle('highlight', features.fp1_triggered);
+            elements.fp2Card.classList.toggle('highlight', features.fp2_triggered);
 
             // Update stats
             elements.statCommands.textContent = wheelchair.total_commands || 0;
