@@ -429,18 +429,10 @@ def detect_command() -> Optional[dict]:
     if len(state.eeg_buffer_fp1) < wc_config.WINDOW_SIZE_SAMPLES:
         return None
 
-    # Throttle detection to ~10 Hz (every 100ms) to reduce CPU load
-    now = time.time()
-    if not hasattr(state, '_last_detect_time'):
-        state._last_detect_time = 0
-    if (now - state._last_detect_time) < 0.1:
-        return None  # Skip this call, too soon
-    state._last_detect_time = now
-
     try:
         # Get data from buffers
-        fp1_data = np.array(state.eeg_buffer_fp1)
-        fp2_data = np.array(state.eeg_buffer_fp2)
+        fp1_data = np.array(list(state.eeg_buffer_fp1))
+        fp2_data = np.array(list(state.eeg_buffer_fp2))
 
         # Run detection
         result = state.command_detector.get_command(fp1_data, fp2_data)
@@ -483,7 +475,7 @@ def detect_command() -> Optional[dict]:
         now = time.time()
 
         RELEASE_TOL = 0.5          # seconds (gesture dropout tolerance before stopping)
-        KEEPALIVE_INTERVAL = 0.25  # seconds (resend rate while active) - was 0.08, increased to reduce lag
+        KEEPALIVE_INTERVAL = 0.08  # seconds (resend rate while active)
 
         # 1) Latch the active action while we see a valid command
         if arduino_action in ("forward", "right"):
