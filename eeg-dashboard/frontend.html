@@ -1492,8 +1492,25 @@
         function updateVisionDisplay(result) {
             if (!result) return;
 
-            // Parse the result from Overshoot - check if obstacle is mentioned
-            const resultText = typeof result === 'string' ? result : (result.result || '');
+            console.log('Processing vision result:', result, typeof result);
+
+            // Parse the result from Overshoot - handle different formats
+            let resultText = '';
+            if (typeof result === 'string') {
+                resultText = result;
+            } else if (result.result) {
+                resultText = result.result;
+            } else if (result.text) {
+                resultText = result.text;
+            } else if (result.message) {
+                resultText = result.message;
+            } else if (result.content) {
+                resultText = result.content;
+            } else {
+                // Try to stringify the object to see what we got
+                resultText = JSON.stringify(result);
+            }
+
             const lowerText = resultText.toLowerCase();
 
             // Check for obstacle indicators
@@ -1505,15 +1522,20 @@
                              lowerText.includes('barrier') ||
                              lowerText.includes('yes');
 
-            elements.visionStatusInline.className = 'vision-status-inline ' + (isBlocked ? 'blocked' : 'clear');
-            elements.visionIconInline.textContent = isBlocked ? '⛔' : '✓';
-            elements.visionTextInline.textContent = isBlocked ? 'OBSTACLE' : 'CLEAR';
-            elements.visionMessageInline.textContent = resultText;
+            const isClear = lowerText.includes('no') ||
+                           lowerText.includes('clear') ||
+                           lowerText.includes('empty') ||
+                           lowerText.includes('nothing');
+
+            const showBlocked = isBlocked && !isClear;
+
+            elements.visionStatusInline.className = 'vision-status-inline ' + (showBlocked ? 'blocked' : 'clear');
+            elements.visionIconInline.textContent = showBlocked ? '⛔' : '✓';
+            elements.visionTextInline.textContent = showBlocked ? 'OBSTACLE' : 'CLEAR';
+            elements.visionMessageInline.textContent = resultText.substring(0, 200);
 
             // Log detection
-            if (isBlocked) {
-                log(`Obstacle detected: ${resultText.substring(0, 50)}`, 'error');
-            }
+            log(`Vision: ${resultText.substring(0, 60)}`, showBlocked ? 'error' : 'info');
         }
 
         // Start Overshoot Vision
