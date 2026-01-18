@@ -523,6 +523,42 @@
             overflow-y: auto;
         }
 
+        /* Movement Status */
+        .movement-status {
+            background: #1a1a2e;
+            border-radius: 12px;
+            padding: 1rem;
+            text-align: center;
+        }
+
+        .movement-action {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #2ed573;
+            margin-bottom: 0.25rem;
+        }
+
+        .movement-action.forward {
+            color: #2ed573;
+        }
+
+        .movement-action.right {
+            color: #ffa502;
+        }
+
+        .movement-action.blocked {
+            color: #ff4757;
+        }
+
+        .movement-action.idle {
+            color: #666;
+        }
+
+        .movement-detail {
+            font-size: 0.8rem;
+            color: #888;
+        }
+
         /* Vision toggle (Overshoot) */
         #vision-switch .slider::before {
             content: 'VISION OFF';
@@ -940,6 +976,14 @@
         <!-- Right Panel: Wheelchair Control -->
         <aside class="wheelchair-panel">
             <div class="control-section">
+                <h3>Movement Status</h3>
+                <div class="movement-status" id="movement-status">
+                    <div class="movement-action" id="movement-action">IDLE</div>
+                    <div class="movement-detail" id="movement-detail">Waiting for command...</div>
+                </div>
+            </div>
+
+            <div class="control-section">
                 <h3>Overshoot Vision</h3>
                 <input type="text" id="overshoot-api-key" class="port-input" placeholder="Overshoot API Key..." style="margin-bottom: 0.5rem;">
                 <label class="toggle-switch" id="vision-switch">
@@ -1074,6 +1118,8 @@
                 'backward': '&#x2193;',  // Down arrow
                 'left': '&#x2190;',      // Left arrow
                 'right': '&#x2192;',     // Right arrow
+                'blocked': '&#x26D4;',   // No entry
+                'both': '&#x2191;',      // Up arrow for both
                 'null': '--'
             }
         };
@@ -1145,6 +1191,10 @@
             statLastCmd: document.getElementById('stat-last-cmd'),
             commandHistoryEl: document.getElementById('command-history'),
             deltaLog: document.getElementById('delta-log'),
+            // Movement status elements
+            movementStatus: document.getElementById('movement-status'),
+            movementAction: document.getElementById('movement-action'),
+            movementDetail: document.getElementById('movement-detail'),
             // Overshoot Vision elements
             overshootApiKey: document.getElementById('overshoot-api-key'),
             visionToggle: document.getElementById('vision-toggle'),
@@ -1158,6 +1208,7 @@
 
         // Overshoot Vision state
         let visionEnabled = false;
+        let obstacleDetected = false;
 
         // Delta log state
         let lastDeltaLogTime = 0;
@@ -1420,15 +1471,35 @@
         function updateCommandDisplay(wheelchair) {
             if (!wheelchair) return;
 
-            const cmd = wheelchair.command;
+            let cmd = wheelchair.command;
             const confidence = wheelchair.confidence || 0;
             const features = wheelchair.features || {};
             const cooldown = wheelchair.cooldown || 0;
 
+            // Check if forward is blocked by obstacle
+            let blockedByObstacle = false;
+            if (cmd === 'forward' && obstacleDetected && visionEnabled) {
+                blockedByObstacle = true;
+                cmd = null; // Cancel the forward command
+            }
+
+            // Update movement status
+            if (blockedByObstacle) {
+                updateMovementStatus('BLOCKED', 'Forward blocked - obstacle detected!');
+            } else if (cmd === 'forward') {
+                updateMovementStatus('FORWARD', 'Moving forward');
+            } else if (cmd === 'right') {
+                updateMovementStatus('RIGHT', 'Turning right');
+            } else if (cmd === 'both') {
+                updateMovementStatus('FORWARD', 'Both channels triggered');
+            } else if (!cmd) {
+                updateMovementStatus('IDLE', 'Waiting for command...');
+            }
+
             // Update command display
             elements.commandDisplay.className = 'command-display' + (cmd ? ` active ${cmd}` : '');
             elements.commandIcon.innerHTML = CONFIG.commandIcons[cmd] || '--';
-            elements.commandText.textContent = cmd ? cmd.toUpperCase() : 'WAITING';
+            elements.commandText.textContent = cmd ? cmd.toUpperCase() : (blockedByObstacle ? 'BLOCKED' : 'WAITING');
             elements.commandConfidence.textContent = cmd ? `Confidence: ${(confidence * 100).toFixed(0)}%` : '--';
 
             // Update cooldown bar
@@ -1445,9 +1516,9 @@
 
             // Log deltas every 0.5 seconds
             const now = Date.now();
-            if (fp1Pct !== undefined && fp2Pct !== undefined && (now - lastDeltaLogTime >= DELTA_LOG_INTERVAL || cmd)) {
+            if (fp1Pct !== undefined && fp2Pct !== undefined && (now - lastDeltaLogTime >= DELTA_LOG_INTERVAL || cmd || blockedByObstacle)) {
                 lastDeltaLogTime = now;
-                addDeltaLog(fp1Pct, fp2Pct, cmd);
+                addDeltaLog(fp1Pct, fp2Pct, blockedByObstacle ? 'BLOCKED' : cmd);
             }
 
             // Highlight FP1/FP2 based on spike
@@ -1459,11 +1530,16 @@
             elements.statLastCmd.textContent = wheelchair.last_command ? wheelchair.last_command.toUpperCase() : '--';
 
             // Add to history if new command
-            if (cmd && (commandHistory.length === 0 || commandHistory[0].command !== cmd || Date.now() - commandHistory[0].time > 1500)) {
-                commandHistory.unshift({ command: cmd, confidence, time: Date.now() });
+            if ((cmd || blockedByObstacle) && (commandHistory.length === 0 || commandHistory[0].command !== (cmd || 'blocked') || Date.now() - commandHistory[0].time > 1500)) {
+                const historyCmd = blockedByObstacle ? 'blocked' : cmd;
+                commandHistory.unshift({ command: historyCmd, confidence, time: Date.now() });
                 if (commandHistory.length > 20) commandHistory.pop();
                 updateCommandHistory();
-                log(`Command: ${cmd.toUpperCase()} (${(confidence * 100).toFixed(0)}%)`, 'command');
+                if (blockedByObstacle) {
+                    log(`BLOCKED: Forward prevented - obstacle detected!`, 'error');
+                } else {
+                    log(`Command: ${cmd.toUpperCase()} (${(confidence * 100).toFixed(0)}%)`, 'command');
+                }
             }
         }
 
@@ -1534,12 +1610,22 @@
                 isBlocked = lowerText.includes('true') || lowerText.includes('blocked": true');
             }
 
+            // Update global obstacle state
+            obstacleDetected = isBlocked;
+
             elements.visionStatusInline.className = 'vision-status-inline ' + (isBlocked ? 'blocked' : 'clear');
             elements.visionIconInline.textContent = isBlocked ? '⛔' : '✓';
             elements.visionTextInline.textContent = isBlocked ? 'BLOCKED' : 'CLEAR';
             elements.visionMessageInline.textContent = isBlocked ? 'Obstacle detected ahead' : 'Path is clear';
 
             console.log('Vision blocked:', isBlocked);
+        }
+
+        // Update movement status display
+        function updateMovementStatus(action, detail) {
+            elements.movementAction.textContent = action;
+            elements.movementAction.className = 'movement-action ' + action.toLowerCase();
+            elements.movementDetail.textContent = detail;
         }
 
         // Start Overshoot Vision

@@ -226,9 +226,9 @@ class CommandDetector:
             self.fp1_change_start = None
             self.fp2_change_start = None
         elif fp1_triggered:
-            command = config.Command.LEFT
+            command = config.Command.FORWARD
             confidence = min(1.0, fp1_pct_change)
-            logger.info(f"LEFT: Ch1 changed {fp1_pct_change*100:.1f}% for {fp1_duration:.2f}s")
+            logger.info(f"FORWARD: Ch1 changed {fp1_pct_change*100:.1f}% for {fp1_duration:.2f}s")
             self.fp1_change_start = None
         elif fp2_triggered:
             command = config.Command.RIGHT
