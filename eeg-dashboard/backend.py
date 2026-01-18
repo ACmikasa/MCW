@@ -413,7 +413,7 @@ def get_board_data() -> Optional[np.ndarray]:
 # -----------------------------------------------------------------------------
 
 def detect_command() -> Optional[dict]:
-    """Detect wheelchair command from current buffer."""
+    """Detect wheelchair command from current buffer and send to Arduino."""
     global state
 
     if not state.wheelchair_enabled or not state.command_detector:
@@ -442,6 +442,38 @@ def detect_command() -> Optional[dict]:
                 print(f"Ch1: {f['fp1_pct_change']:6.1f}% | Ch3: {f['fp2_pct_change']:6.1f}%{cmd_str}")
                 state._last_delta_print = current_time
 
+        # Track last Arduino command to avoid spamming
+        if not hasattr(state, '_last_arduino_cmd'):
+            state._last_arduino_cmd = None
+
+        # Determine Arduino action based on command and obstacle detection
+        arduino_action = None
+        is_blocked = False
+
+        if result.command == 'forward' or result.command == 'both':
+            # Check if blocked by vision
+            if state.vision_enabled and state.object_detected:
+                is_blocked = True
+                arduino_action = 'stop'
+                print("[ARDUINO] Forward BLOCKED by obstacle!")
+            else:
+                arduino_action = 'forward'
+        elif result.command == 'right':
+            arduino_action = 'right'
+        else:
+            # No command - stop motors
+            arduino_action = 'stop'
+
+        # Send to Arduino (only if changed to avoid spamming serial)
+        if arduino.is_connected and arduino_action != state._last_arduino_cmd:
+            state._last_arduino_cmd = arduino_action
+            if arduino_action == 'forward':
+                arduino.forward()
+            elif arduino_action == 'right':
+                arduino.right()
+            elif arduino_action == 'stop':
+                arduino.stop()
+
         # Update state
         if result.command:
             state.last_command = result.command
@@ -463,6 +495,8 @@ def detect_command() -> Optional[dict]:
             'confidence': result.confidence,
             'features': result.features,
             'cooldown_remaining': state.command_detector.get_cooldown_remaining(),
+            'arduino_action': arduino_action,
+            'is_blocked': is_blocked,
         }
 
     except Exception as e:

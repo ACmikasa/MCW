@@ -1,117 +1,127 @@
 /*
  * EEG Wheelchair Motor Control
  *
- * Receives single character commands via Serial:
+ * Receives commands via Serial from Python backend:
  * 'F' = Forward (both motors)
- * 'R' = Turn Right
- * 'L' = Turn Left
- * 'B' = Backward
- * 'S' = Stop
+ * 'R' = Turn Right (left motor forward, right stopped)
+ * 'S' = Stop (all motors off)
  *
- * Wiring:
- * - Left Motor: IN1=2, IN2=3, ENA=5 (PWM)
- * - Right Motor: IN3=4, IN4=7, ENB=6 (PWM)
+ * Motor Configuration (your tested setup):
+ * - Left motor: FWD=6, REV=5 (flipped)
+ * - Right motor: FWD=9, REV=10 (normal)
  */
 
-// Motor A (Left)
-const int ENA = 5;   // PWM speed control
-const int IN1 = 2;   // Direction
-const int IN2 = 3;   // Direction
+// ===================== Motor pins (based on your tests) =====================
+// Left motor is flipped:
+const int LEFT_REV  = 5;
+const int LEFT_FWD  = 6;
 
-// Motor B (Right)
-const int ENB = 6;   // PWM speed control
-const int IN3 = 4;   // Direction
-const int IN4 = 7;   // Direction
+// Right motor normal:
+const int RIGHT_FWD = 9;
+const int RIGHT_REV = 10;
 
-const int SPEED = 200;  // Motor speed (0-255)
-const int TURN_SPEED = 150;  // Speed for turning
+// ===================== Speed tuning =====================
+const int PWM_DRIVE = 150;      // Speed for forward movement (0-255)
+const int PWM_TURN  = 120;      // Speed for turning
+
+// Current command state
+char currentCommand = 'S';  // Start stopped
 
 void setup() {
   Serial.begin(9600);
 
-  // Set motor pins as outputs
-  pinMode(ENA, OUTPUT);
-  pinMode(IN1, OUTPUT);
-  pinMode(IN2, OUTPUT);
-  pinMode(ENB, OUTPUT);
-  pinMode(IN3, OUTPUT);
-  pinMode(IN4, OUTPUT);
+  pinMode(LEFT_FWD, OUTPUT);
+  pinMode(LEFT_REV, OUTPUT);
+  pinMode(RIGHT_FWD, OUTPUT);
+  pinMode(RIGHT_REV, OUTPUT);
 
-  // Start with motors stopped
-  stopMotors();
+  stopAll();
 
-  Serial.println("EEG Wheelchair Ready");
+  Serial.println("EEG Wheelchair Ready - Listening for commands (F/R/S)");
 }
 
 void loop() {
+  // Check for incoming serial commands
   if (Serial.available() > 0) {
     char cmd = Serial.read();
 
-    switch(cmd) {
-      case 'F':  // Forward
-        forward();
-        break;
-      case 'R':  // Right
-        turnRight();
-        break;
-      case 'L':  // Left
-        turnLeft();
-        break;
-      case 'B':  // Backward
-        backward();
-        break;
-      case 'S':  // Stop
-        stopMotors();
-        break;
+    // Only process valid commands
+    if (cmd == 'F' || cmd == 'R' || cmd == 'S') {
+      if (cmd != currentCommand) {
+        currentCommand = cmd;
+        executeCommand(cmd);
+      }
     }
   }
 }
 
-void forward() {
-  // Both motors forward
-  digitalWrite(IN1, HIGH);
-  digitalWrite(IN2, LOW);
-  digitalWrite(IN3, HIGH);
-  digitalWrite(IN4, LOW);
-  analogWrite(ENA, SPEED);
-  analogWrite(ENB, SPEED);
+void executeCommand(char cmd) {
+  switch(cmd) {
+    case 'F':
+      Serial.println("-> FORWARD");
+      driveForward();
+      break;
+    case 'R':
+      Serial.println("-> RIGHT");
+      turnRight();
+      break;
+    case 'S':
+      Serial.println("-> STOP");
+      stopAll();
+      break;
+  }
 }
 
-void backward() {
-  // Both motors backward
-  digitalWrite(IN1, LOW);
-  digitalWrite(IN2, HIGH);
-  digitalWrite(IN3, LOW);
-  digitalWrite(IN4, HIGH);
-  analogWrite(ENA, SPEED);
-  analogWrite(ENB, SPEED);
+// ===================== Movement functions =====================
+
+void driveForward() {
+  // Both motors forward at same speed
+  setLeft(PWM_DRIVE);
+  setRight(PWM_DRIVE);
 }
 
 void turnRight() {
-  // Left motor forward, right motor slower/stopped
-  digitalWrite(IN1, HIGH);
-  digitalWrite(IN2, LOW);
-  digitalWrite(IN3, LOW);
-  digitalWrite(IN4, LOW);
-  analogWrite(ENA, TURN_SPEED);
-  analogWrite(ENB, 0);
+  // Left motor forward, right motor stopped (pivot turn)
+  setLeft(PWM_TURN);
+  setRight(0);
 }
 
-void turnLeft() {
-  // Right motor forward, left motor slower/stopped
-  digitalWrite(IN1, LOW);
-  digitalWrite(IN2, LOW);
-  digitalWrite(IN3, HIGH);
-  digitalWrite(IN4, LOW);
-  analogWrite(ENA, 0);
-  analogWrite(ENB, TURN_SPEED);
+// ===================== Motor control (from your tested code) =====================
+
+// signedPWM: + forward, - reverse, 0 stop
+void setLeft(int signedPWM) {
+  signedPWM = constrain(signedPWM, -255, 255);
+
+  if (signedPWM > 0) {
+    analogWrite(LEFT_FWD, signedPWM);
+    analogWrite(LEFT_REV, 0);
+  } else if (signedPWM < 0) {
+    analogWrite(LEFT_FWD, 0);
+    analogWrite(LEFT_REV, -signedPWM);
+  } else {
+    analogWrite(LEFT_FWD, 0);
+    analogWrite(LEFT_REV, 0);
+  }
 }
 
-void stopMotors() {
-  digitalWrite(IN1, LOW);
-  digitalWrite(IN2, LOW);
-  digitalWrite(IN3, LOW);
-  digitalWrite(IN4, LOW);
-  analogWrite(ENA, 0);
-  analogWrite(ENB, 0);
+void setRight(int signedPWM) {
+  signedPWM = constrain(signedPWM, -255, 255);
+
+  if (signedPWM > 0) {
+    analogWrite(RIGHT_FWD, signedPWM);
+    analogWrite(RIGHT_REV, 0);
+  } else if (signedPWM < 0) {
+    analogWrite(RIGHT_FWD, 0);
+    analogWrite(RIGHT_REV, -signedPWM);
+  } else {
+    analogWrite(RIGHT_FWD, 0);
+    analogWrite(RIGHT_REV, 0);
+  }
+}
+
+void stopAll() {
+  analogWrite(LEFT_FWD, 0);
+  analogWrite(LEFT_REV, 0);
+  analogWrite(RIGHT_FWD, 0);
+  analogWrite(RIGHT_REV, 0);
 }
