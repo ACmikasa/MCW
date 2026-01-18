@@ -1041,7 +1041,14 @@
     <!-- Overshoot SDK -->
     <script type="module">
         // Import Overshoot SDK
-        import { RealtimeVision } from 'https://esm.run/@overshoot/sdk';
+        let RealtimeVision = null;
+        try {
+            const sdk = await import('https://esm.run/@overshoot/sdk');
+            RealtimeVision = sdk.RealtimeVision;
+            console.log('Overshoot SDK loaded:', sdk);
+        } catch (e) {
+            console.error('Failed to load Overshoot SDK:', e);
+        }
 
         // Overshoot Vision instance
         let overshootVision = null;
@@ -1518,29 +1525,54 @@
                 return;
             }
 
+            if (!RealtimeVision) {
+                log('Overshoot SDK not loaded. Check browser console.', 'error');
+                elements.visionToggle.checked = false;
+                return;
+            }
+
             try {
+                log('Initializing Overshoot Vision...', 'info');
+                console.log('RealtimeVision class:', RealtimeVision);
+
+                // Get video stream first
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'environment', width: 640, height: 480 }
+                });
+                elements.overshootVideo.srcObject = stream;
+                elements.cameraFeedSection.style.display = 'block';
+
                 overshootVision = new RealtimeVision({
                     apiUrl: 'https://cluster1.overshoot.ai/api/v0.2',
                     apiKey: apiKey,
-                    prompt: 'Is there an obstacle directly in front that would block a wheelchair? Answer with YES or NO, then briefly describe what you see.',
+                    prompt: 'Is there an obstacle directly in front that would block a wheelchair? Answer YES if blocked or NO if clear, then describe briefly.',
                     source: { type: 'camera', cameraFacing: 'environment' },
                     onResult: (result) => {
+                        console.log('Overshoot result:', result);
                         updateVisionDisplay(result);
                     },
                     onError: (error) => {
+                        console.error('Overshoot error:', error);
                         log(`Vision error: ${error}`, 'error');
+                    },
+                    onStatusChange: (status) => {
+                        console.log('Overshoot status:', status);
+                        log(`Vision status: ${status}`, 'info');
                     }
                 });
 
-                // Get video stream to display
-                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-                elements.overshootVideo.srcObject = stream;
+                // Start the vision if there's a start method
+                if (overshootVision.start) {
+                    await overshootVision.start();
+                    log('Overshoot Vision started', 'success');
+                } else {
+                    log('Overshoot Vision initialized (auto-start)', 'success');
+                }
 
-                elements.cameraFeedSection.style.display = 'block';
                 visionEnabled = true;
-                log('Overshoot Vision started', 'success');
 
             } catch (error) {
+                console.error('Vision init error:', error);
                 log(`Failed to start vision: ${error.message}`, 'error');
                 elements.visionToggle.checked = false;
                 visionEnabled = false;
