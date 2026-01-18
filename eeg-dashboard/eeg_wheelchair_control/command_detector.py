@@ -1,23 +1,49 @@
 """
 Command Detection Module for EEG Wheelchair Control.
 
-Implements detection algorithms for:
-- Look Left (FP2 > FP1)
-- Look Right (FP1 > FP2)
-- Jaw Clench (high-frequency EMG power)
-- Double Eye Blink (two consecutive peaks)
+Simple spike-based detection:
+- Detects spikes (sudden increases) in FP1/FP2 signals
+- Compares FP1 vs FP2 to determine LEFT or RIGHT
+- No calibration required
 """
 
 import time
 import logging
-from typing import Optional, Dict, Tuple
+import json
+from pathlib import Path
+from typing import Optional, Dict
 from dataclasses import dataclass
+from collections import deque
 import numpy as np
 
 from . import config
-from .signal_processor import SignalProcessor, Features
+from .signal_processor import SignalProcessor
 
 logger = logging.getLogger(__name__)
+
+
+def load_detection_settings() -> Dict:
+    """Load detection settings from JSON config file."""
+    config_file = Path("detection_multipliers.json")
+    defaults = {
+        "spike_threshold": 1.5,
+        "min_spike_diff": 0.2,
+        "cooldown_sec": 0.5,
+    }
+
+    if config_file.exists():
+        try:
+            with open(config_file, 'r') as f:
+                loaded = json.load(f)
+                for key in defaults:
+                    if key in loaded:
+                        defaults[key] = loaded[key]
+                logger.info(f"Loaded detection settings: {defaults}")
+                return defaults
+        except Exception as e:
+            logger.warning(f"Error loading detection settings: {e}")
+
+    return defaults
 
 
 @dataclass
@@ -31,360 +57,174 @@ class DetectionResult:
 
 class CommandDetector:
     """
-    Real-time command detector for EEG-based wheelchair control.
+    Simple spike-based command detector.
 
-    Detects four commands:
-    - FORWARD: Jaw clench (strong EMG in 20-100 Hz band)
-    - BACKWARD: Double eye blink (two peaks within 200-800ms)
-    - LEFT: Look left (FP2 amplitude > FP1 amplitude)
-    - RIGHT: Look right (FP1 amplitude > FP2 amplitude)
+    Detects sudden increases (spikes) in FP1/FP2 signals and determines
+    direction based on which channel has the larger spike:
+    - FP1 > FP2 → RIGHT
+    - FP2 > FP1 → LEFT
     """
 
     def __init__(self, calibration_data: Optional[Dict] = None):
-        """
-        Initialize the command detector.
-
-        Args:
-            calibration_data: Optional calibration data from calibration.py
-        """
+        """Initialize the command detector."""
         self.signal_processor = SignalProcessor()
 
-        # Load calibration or use defaults
-        self.thresholds = self._load_thresholds(calibration_data)
+        # Load settings from config file
+        settings = load_detection_settings()
 
-        # State tracking
+        # Rolling baseline tracking (last N values)
+        self.baseline_window = 50  # samples for baseline calculation
+        self.fp1_history = deque(maxlen=self.baseline_window)
+        self.fp2_history = deque(maxlen=self.baseline_window)
+
+        # Spike detection parameters (loaded from config)
+        self.spike_threshold = settings.get('spike_threshold', 1.5)
+        self.min_spike_diff = settings.get('min_spike_diff', 0.2)
+        self.cooldown_sec = settings.get('cooldown_sec', 0.5)
+
+        # Cooldown to prevent repeated triggers
         self.last_command_time = 0.0
-        self.last_command = None
-        self.cooldown_active = False
 
-        # For signal-return-to-baseline check
-        self.signal_was_below_threshold = True
+        # Track if we're in a spike (to detect when it ends)
+        self.in_spike = False
+        self.spike_start_time = 0.0
 
-        logger.info("CommandDetector initialized")
-        logger.info(f"Thresholds: {self.thresholds}")
-
-    def _load_thresholds(self, calibration_data: Optional[Dict]) -> Dict:
-        """Load thresholds from calibration data or use defaults."""
-        if calibration_data:
-            return {
-                'blink_threshold': calibration_data.get('blink_threshold', 50.0),
-                'jaw_threshold': calibration_data.get('jaw_threshold', 500.0),
-                'eye_move_threshold': calibration_data.get('eye_move_threshold', 30.0),
-                'lateral_ratio': calibration_data.get('lateral_ratio', config.LATERAL_RATIO),
-                'baseline_amplitude': calibration_data.get('baseline_amplitude', 20.0),
-                'baseline_jaw_power': calibration_data.get('baseline_jaw_power', 200.0),
-            }
-        else:
-            # Default thresholds (should be calibrated for each user)
-            # These work with raw values from OpenBCI
-            return {
-                'blink_threshold': 50000.0,     # Raw amplitude for blink peaks
-                'jaw_threshold': 500000.0,      # Raw power for jaw clench
-                'eye_move_threshold': 30000.0,  # Raw amplitude for eye movements
-                'lateral_ratio': config.LATERAL_RATIO,
-                'baseline_amplitude': 20000.0,
-                'baseline_jaw_power': 200000.0,
-            }
+        logger.info(f"CommandDetector initialized - spike_threshold={self.spike_threshold}, min_diff={self.min_spike_diff}, cooldown={self.cooldown_sec}s")
 
     def update_thresholds(self, calibration_data: Dict):
-        """Update thresholds with new calibration data."""
-        self.thresholds = self._load_thresholds(calibration_data)
-        logger.info(f"Thresholds updated: {self.thresholds}")
-
-    def detect_jaw_clench(self, features: Features) -> Tuple[bool, float]:
-        """
-        Detect jaw clench from high-frequency EMG power.
-
-        Jaw clenching activates the temporalis muscle, producing strong
-        EMG signals in the 20-100 Hz band on frontal electrodes.
-
-        Args:
-            features: Extracted signal features
-
-        Returns:
-            Tuple of (detected: bool, confidence: float)
-        """
-        threshold = self.thresholds['jaw_threshold']
-        baseline = self.thresholds['baseline_jaw_power']
-
-        # Check if jaw power exceeds threshold
-        if features.jaw_power > threshold:
-            # Calculate confidence based on how far above threshold
-            ratio = features.jaw_power / threshold
-            confidence = min(1.0, 0.5 + (ratio - 1.0) * 0.5)
-
-            logger.debug(f"Jaw clench detected: power={features.jaw_power:.2f}, "
-                        f"threshold={threshold:.2f}, confidence={confidence:.2f}")
-            return True, confidence
-
-        return False, 0.0
-
-    def detect_double_blink(self, features: Features, fp1_eog: np.ndarray) -> Tuple[bool, float]:
-        """
-        Detect double eye blink from two consecutive peaks.
-
-        Double blinks are identified by:
-        1. Exactly 2 high-amplitude peaks in the window
-        2. Peaks are 200-800ms apart
-
-        Args:
-            features: Extracted signal features
-            fp1_eog: EOG-filtered FP1 signal for precise peak timing
-
-        Returns:
-            Tuple of (detected: bool, confidence: float)
-        """
-        peaks = features.blink_peaks
-
-        # Need exactly 2 peaks for double blink
-        if len(peaks) != 2:
-            return False, 0.0
-
-        # Check timing between peaks
-        peak_interval = peaks[1] - peaks[0]
-
-        if (config.BLINK_MIN_INTERVAL_SAMPLES <= peak_interval <=
-            config.BLINK_MAX_INTERVAL_SAMPLES):
-
-            # Calculate confidence based on peak amplitudes
-            threshold = self.thresholds['blink_threshold']
-
-            # Get peak amplitudes from the EOG signal
-            if len(fp1_eog) > max(peaks):
-                amp1 = abs(fp1_eog[peaks[0]])
-                amp2 = abs(fp1_eog[peaks[1]])
-                avg_amp = (amp1 + amp2) / 2
-
-                ratio = avg_amp / threshold
-                confidence = min(1.0, 0.5 + (ratio - 1.0) * 0.3)
-
-                interval_ms = peak_interval / config.SAMPLING_RATE * 1000
-                logger.debug(f"Double blink detected: interval={interval_ms:.0f}ms, "
-                            f"confidence={confidence:.2f}")
-                return True, confidence
-
-        return False, 0.0
-
-    def detect_look_left(self, features: Features) -> Tuple[bool, float]:
-        """
-        Detect looking left from FP2 > FP1 amplitude asymmetry.
-
-        When looking left, the eyes move toward FP2 (right electrode),
-        creating a stronger signal on FP2 than FP1.
-
-        Args:
-            features: Extracted signal features
-
-        Returns:
-            Tuple of (detected: bool, confidence: float)
-        """
-        threshold = self.thresholds['eye_move_threshold']
-        ratio_threshold = self.thresholds['lateral_ratio']
-
-        # Check if FP2 exceeds threshold AND is significantly larger than FP1
-        if (features.fp2_max > threshold and
-            features.fp2_fp1_ratio > ratio_threshold):
-
-            # Calculate confidence
-            ratio_excess = features.fp2_fp1_ratio / ratio_threshold
-            amp_excess = features.fp2_max / threshold
-            confidence = min(1.0, 0.4 + ratio_excess * 0.3 + amp_excess * 0.2)
-
-            logger.debug(f"Look LEFT detected: FP2={features.fp2_max:.2f}, "
-                        f"ratio={features.fp2_fp1_ratio:.2f}, confidence={confidence:.2f}")
-            return True, confidence
-
-        return False, 0.0
-
-    def detect_look_right(self, features: Features) -> Tuple[bool, float]:
-        """
-        Detect looking right from FP1 > FP2 amplitude asymmetry.
-
-        When looking right, the eyes move toward FP1 (left electrode),
-        creating a stronger signal on FP1 than FP2.
-
-        Args:
-            features: Extracted signal features
-
-        Returns:
-            Tuple of (detected: bool, confidence: float)
-        """
-        threshold = self.thresholds['eye_move_threshold']
-        ratio_threshold = self.thresholds['lateral_ratio']
-
-        # Check if FP1 exceeds threshold AND is significantly larger than FP2
-        if (features.fp1_max > threshold and
-            features.fp1_fp2_ratio > ratio_threshold):
-
-            # Calculate confidence
-            ratio_excess = features.fp1_fp2_ratio / ratio_threshold
-            amp_excess = features.fp1_max / threshold
-            confidence = min(1.0, 0.4 + ratio_excess * 0.3 + amp_excess * 0.2)
-
-            logger.debug(f"Look RIGHT detected: FP1={features.fp1_max:.2f}, "
-                        f"ratio={features.fp1_fp2_ratio:.2f}, confidence={confidence:.2f}")
-            return True, confidence
-
-        return False, 0.0
-
-    def check_cooldown(self) -> bool:
-        """Check if cooldown period has elapsed."""
-        current_time = time.time()
-        elapsed = current_time - self.last_command_time
-
-        if elapsed < config.COMMAND_COOLDOWN_SEC:
-            return True  # Still in cooldown
-
-        return False
-
-    def get_cooldown_remaining(self) -> float:
-        """Get remaining cooldown time in seconds."""
-        elapsed = time.time() - self.last_command_time
-        remaining = config.COMMAND_COOLDOWN_SEC - elapsed
-        return max(0.0, remaining)
+        """Update thresholds (kept for compatibility but not really used)."""
+        # Could use calibration to set spike_threshold if desired
+        if 'spike_threshold' in calibration_data:
+            self.spike_threshold = calibration_data['spike_threshold']
+        logger.info(f"Spike threshold: {self.spike_threshold}")
 
     def get_command(self, fp1_raw: np.ndarray, fp2_raw: np.ndarray) -> DetectionResult:
         """
-        Main detection function - analyzes signals and returns detected command.
-
-        Detection priority (most distinct signals first):
-        1. Jaw clench (FORWARD) - very distinct EMG pattern
-        2. Double blink (BACKWARD) - time-based pattern
-        3. Look left (LEFT) - amplitude asymmetry
-        4. Look right (RIGHT) - amplitude asymmetry
+        Detect commands based on spikes in the signal.
 
         Args:
             fp1_raw: Raw FP1 data (1-second window)
             fp2_raw: Raw FP2 data (1-second window)
 
         Returns:
-            DetectionResult with command, confidence, and features
+            DetectionResult with command (LEFT, RIGHT, or None)
         """
         timestamp = time.time()
 
-        # Extract features
-        features = self.signal_processor.extract_features(
-            fp1_raw, fp2_raw,
-            baseline_stats={'blink_threshold': self.thresholds['blink_threshold']}
-        )
+        # Get current amplitude values (max absolute value in window)
+        fp1_current = np.max(np.abs(fp1_raw))
+        fp2_current = np.max(np.abs(fp2_raw))
 
-        # Check signal quality
-        if features.signal_quality < config.MIN_SIGNAL_QUALITY:
-            logger.warning(f"Poor signal quality: {features.signal_quality:.2f}")
+        # Also compute mean absolute for this window
+        fp1_mean = np.mean(np.abs(fp1_raw))
+        fp2_mean = np.mean(np.abs(fp2_raw))
+
+        # Add to history for baseline tracking
+        self.fp1_history.append(fp1_mean)
+        self.fp2_history.append(fp2_mean)
+
+        # Calculate baseline (mean of recent history)
+        if len(self.fp1_history) < 10:
+            # Not enough history yet
             return DetectionResult(
                 command=None,
                 confidence=0.0,
-                features=self._features_to_dict(features),
+                features={
+                    'fp1_current': float(fp1_current),
+                    'fp2_current': float(fp2_current),
+                    'fp1_mean': float(fp1_mean),
+                    'fp2_mean': float(fp2_mean),
+                    'status': 'warming_up'
+                },
                 timestamp=timestamp
             )
+
+        fp1_baseline = np.mean(list(self.fp1_history)[:-1])  # Exclude current
+        fp2_baseline = np.mean(list(self.fp2_history)[:-1])
+        fp1_std = np.std(list(self.fp1_history)[:-1]) + 1e-6  # Avoid division by zero
+        fp2_std = np.std(list(self.fp2_history)[:-1]) + 1e-6
+
+        # Calculate absolute change from baseline
+        fp1_change = abs(fp1_current - fp1_baseline)
+        fp2_change = abs(fp2_current - fp2_baseline)
+
+        # Check for spike: absolute change significantly above baseline std
+        fp1_zscore = fp1_change / fp1_std
+        fp2_zscore = fp2_change / fp2_std
+
+        # Determine if there's a spike on either channel
+        is_spike = fp1_zscore > self.spike_threshold or fp2_zscore > self.spike_threshold
+
+        features = {
+            'fp1_current': float(fp1_current),
+            'fp2_current': float(fp2_current),
+            'fp1_change': float(fp1_change),
+            'fp2_change': float(fp2_change),
+            'fp1_baseline': float(fp1_baseline),
+            'fp2_baseline': float(fp2_baseline),
+            'fp1_zscore': float(fp1_zscore),
+            'fp2_zscore': float(fp2_zscore),
+            'is_spike': is_spike,
+        }
 
         # Check cooldown
-        if self.check_cooldown():
+        if timestamp - self.last_command_time < self.cooldown_sec:
+            features['status'] = 'cooldown'
             return DetectionResult(
                 command=None,
                 confidence=0.0,
-                features=self._features_to_dict(features),
+                features=features,
                 timestamp=timestamp
             )
 
-        # Get preprocessed signals for detailed analysis
-        fp1_eog, fp2_eog, fp1_emg, fp2_emg = self.signal_processor.preprocess(
-            fp1_raw, fp2_raw
-        )
+        # Detect command based on spike
+        if is_spike:
+            # Determine direction based on which channel has larger change
+            total_change = fp1_change + fp2_change + 1e-6
+            fp1_ratio = fp1_change / total_change
+            fp2_ratio = fp2_change / total_change
 
-        # Detection in priority order
-        detected_command = None
-        confidence = 0.0
+            diff = abs(fp1_ratio - fp2_ratio)
 
-        # 1. Check jaw clench (most distinct)
-        jaw_detected, jaw_conf = self.detect_jaw_clench(features)
-        if jaw_detected and jaw_conf >= config.MIN_CONFIDENCE:
-            detected_command = config.Command.FORWARD
-            confidence = jaw_conf
+            if diff > self.min_spike_diff:
+                if fp1_change > fp2_change:
+                    command = config.Command.RIGHT
+                    confidence = min(1.0, diff * 2)  # Scale diff to confidence
+                else:
+                    command = config.Command.LEFT
+                    confidence = min(1.0, diff * 2)
 
-        # 2. Check double blink
-        if detected_command is None:
-            blink_detected, blink_conf = self.detect_double_blink(features, fp1_eog)
-            if blink_detected and blink_conf >= config.MIN_CONFIDENCE:
-                detected_command = config.Command.BACKWARD
-                confidence = blink_conf
+                self.last_command_time = timestamp
+                features['direction_diff'] = float(diff)
+                features['fp1_ratio'] = float(fp1_ratio)
+                features['fp2_ratio'] = float(fp2_ratio)
 
-        # 3. Check look left
-        if detected_command is None:
-            left_detected, left_conf = self.detect_look_left(features)
-            if left_detected and left_conf >= config.MIN_CONFIDENCE:
-                detected_command = config.Command.LEFT
-                confidence = left_conf
+                logger.info(f"Spike detected: {command} (FP1 change={fp1_change:.1f}, FP2 change={fp2_change:.1f}, diff={diff:.2f})")
 
-        # 4. Check look right
-        if detected_command is None:
-            right_detected, right_conf = self.detect_look_right(features)
-            if right_detected and right_conf >= config.MIN_CONFIDENCE:
-                detected_command = config.Command.RIGHT
-                confidence = right_conf
+                return DetectionResult(
+                    command=command,
+                    confidence=confidence,
+                    features=features,
+                    timestamp=timestamp
+                )
 
-        # Update state if command detected
-        if detected_command is not None:
-            self.last_command_time = timestamp
-            self.last_command = detected_command
-            logger.info(f"Command detected: {detected_command} (confidence: {confidence:.2f})")
-
+        features['status'] = 'no_spike'
         return DetectionResult(
-            command=detected_command,
-            confidence=confidence,
-            features=self._features_to_dict(features),
+            command=None,
+            confidence=0.0,
+            features=features,
             timestamp=timestamp
         )
 
-    def _features_to_dict(self, features: Features) -> Dict:
-        """Convert Features dataclass to dictionary."""
-        return {
-            'fp1_max': features.fp1_max,
-            'fp2_max': features.fp2_max,
-            'fp1_mean': features.fp1_mean,
-            'fp2_mean': features.fp2_mean,
-            'jaw_power': features.jaw_power,
-            'blink_count': features.blink_count,
-            'fp1_fp2_ratio': features.fp1_fp2_ratio,
-            'fp2_fp1_ratio': features.fp2_fp1_ratio,
-            'signal_quality': features.signal_quality,
-        }
 
-
-# =============================================================================
-# Testing Functions
-# =============================================================================
-
+# For backwards compatibility
 def test_command_detection():
     """Test command detection with synthetic signals."""
-    from .signal_processor import generate_test_signal
-
-    print("\nTesting Command Detection")
+    print("\nSpike-based Command Detection")
     print("=" * 50)
-
-    detector = CommandDetector()
-
-    # Test each command type
-    test_cases = [
-        ('noise', None),
-        ('jaw', config.Command.FORWARD),
-        ('blink', config.Command.BACKWARD),
-        ('left', config.Command.LEFT),
-        ('right', config.Command.RIGHT),
-    ]
-
-    for signal_type, expected in test_cases:
-        fp1, fp2 = generate_test_signal(signal_type=signal_type)
-        result = detector.get_command(fp1, fp2)
-
-        status = "PASS" if result.command == expected else "FAIL"
-        print(f"{signal_type:8} -> {str(result.command):10} "
-              f"(expected: {str(expected):10}) [{status}] "
-              f"conf={result.confidence:.2f}")
-
-        # Reset cooldown between tests
-        detector.last_command_time = 0
-
+    print("This detector looks for spikes and compares FP1 vs FP2")
+    print("- FP1 > FP2 → RIGHT")
+    print("- FP2 > FP1 → LEFT")
     print("=" * 50)
 
 
