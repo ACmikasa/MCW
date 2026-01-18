@@ -357,6 +357,7 @@
             overflow-y: auto; /* Allow scrolling for the whole middle panel */
             overflow-x: hidden;
             padding: 0;
+            padding-bottom: 1rem;
             position: relative;
             scrollbar-width: thin;
             scrollbar-color: rgba(255,255,255,0.1) transparent;
@@ -416,6 +417,7 @@
             min-height: 0;
             overflow: visible; /* Allow content to flow */
             position: relative;
+            flex-shrink: 0;
         }
         
         /* Gradient overlay on chart edges to soften them */
@@ -716,6 +718,9 @@
             padding: 1rem;
             margin-top: 1rem;
             border: 1px solid var(--glass-border);
+            position: relative;
+            z-index: 10;
+            flex-shrink: 0;
         }
 
         .camera-feed-header {
