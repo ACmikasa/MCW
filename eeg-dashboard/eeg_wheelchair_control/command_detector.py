@@ -77,19 +77,19 @@ class CommandDetector:
         self.fp1_history = deque(maxlen=self.baseline_window)
         self.fp2_history = deque(maxlen=self.baseline_window)
 
-        # Spike detection parameters (loaded from config)
-        self.spike_threshold = settings.get('spike_threshold', 1.5)
-        self.min_spike_diff = settings.get('min_spike_diff', 0.2)
+        # Detection parameters (loaded from config)
+        self.spike_threshold = settings.get('spike_threshold', 0.2)  # 20% change
+        self.change_duration_sec = settings.get('change_duration_sec', 0.1)  # How long change must be sustained
         self.cooldown_sec = settings.get('cooldown_sec', 0.5)
 
         # Cooldown to prevent repeated triggers
         self.last_command_time = 0.0
 
-        # Track if we're in a spike (to detect when it ends)
-        self.in_spike = False
-        self.spike_start_time = 0.0
+        # Track when each channel started showing a change
+        self.fp1_change_start = None
+        self.fp2_change_start = None
 
-        logger.info(f"CommandDetector initialized - spike_threshold={self.spike_threshold}, min_diff={self.min_spike_diff}, cooldown={self.cooldown_sec}s")
+        logger.info(f"CommandDetector initialized - threshold={self.spike_threshold*100:.0f}%, duration={self.change_duration_sec}s, cooldown={self.cooldown_sec}s")
 
     def update_thresholds(self, calibration_data: Dict):
         """Update thresholds (kept for compatibility but not really used)."""
@@ -100,71 +100,84 @@ class CommandDetector:
 
     def get_command(self, fp1_raw: np.ndarray, fp2_raw: np.ndarray) -> DetectionResult:
         """
-        Detect commands based on spikes in the signal.
+        Detect commands based on percentage change from baseline.
 
         Args:
             fp1_raw: Raw FP1 data (1-second window)
             fp2_raw: Raw FP2 data (1-second window)
 
         Returns:
-            DetectionResult with command (LEFT, RIGHT, or None)
+            DetectionResult with command (LEFT, RIGHT, both, or None)
         """
         timestamp = time.time()
 
-        # Get current amplitude values (max absolute value in window)
-        fp1_current = np.max(np.abs(fp1_raw))
-        fp2_current = np.max(np.abs(fp2_raw))
-
-        # Also compute mean absolute for this window
-        fp1_mean = np.mean(np.abs(fp1_raw))
-        fp2_mean = np.mean(np.abs(fp2_raw))
+        # Get current value (mean of window)
+        fp1_current = np.mean(np.abs(fp1_raw))
+        fp2_current = np.mean(np.abs(fp2_raw))
 
         # Add to history for baseline tracking
-        self.fp1_history.append(fp1_mean)
-        self.fp2_history.append(fp2_mean)
+        self.fp1_history.append(fp1_current)
+        self.fp2_history.append(fp2_current)
 
-        # Calculate baseline (mean of recent history)
+        # Need some history for baseline
         if len(self.fp1_history) < 10:
-            # Not enough history yet
             return DetectionResult(
                 command=None,
                 confidence=0.0,
                 features={
                     'fp1_current': float(fp1_current),
                     'fp2_current': float(fp2_current),
-                    'fp1_mean': float(fp1_mean),
-                    'fp2_mean': float(fp2_mean),
                     'status': 'warming_up'
                 },
                 timestamp=timestamp
             )
 
-        fp1_baseline = np.mean(list(self.fp1_history)[:-1])  # Exclude current
+        # Calculate baseline (mean of history, excluding current)
+        fp1_baseline = np.mean(list(self.fp1_history)[:-1])
         fp2_baseline = np.mean(list(self.fp2_history)[:-1])
-        fp1_std = np.std(list(self.fp1_history)[:-1]) + 1e-6  # Avoid division by zero
-        fp2_std = np.std(list(self.fp2_history)[:-1]) + 1e-6
 
-        # Calculate absolute change from baseline
-        fp1_change = abs(fp1_current - fp1_baseline)
-        fp2_change = abs(fp2_current - fp2_baseline)
+        # Calculate percentage change from baseline
+        fp1_pct_change = abs(fp1_current - fp1_baseline) / (fp1_baseline + 1e-6)
+        fp2_pct_change = abs(fp2_current - fp2_baseline) / (fp2_baseline + 1e-6)
 
-        # Check for spike: absolute change significantly above baseline std
-        fp1_zscore = fp1_change / fp1_std
-        fp2_zscore = fp2_change / fp2_std
+        # Check if each channel exceeds threshold
+        fp1_above_threshold = fp1_pct_change >= self.spike_threshold
+        fp2_above_threshold = fp2_pct_change >= self.spike_threshold
 
-        # Determine if there's a spike on either channel
-        is_spike = fp1_zscore > self.spike_threshold or fp2_zscore > self.spike_threshold
+        # Track how long each channel has been above threshold
+        if fp1_above_threshold:
+            if self.fp1_change_start is None:
+                self.fp1_change_start = timestamp
+            fp1_duration = timestamp - self.fp1_change_start
+        else:
+            self.fp1_change_start = None
+            fp1_duration = 0.0
+
+        if fp2_above_threshold:
+            if self.fp2_change_start is None:
+                self.fp2_change_start = timestamp
+            fp2_duration = timestamp - self.fp2_change_start
+        else:
+            self.fp2_change_start = None
+            fp2_duration = 0.0
+
+        # Trigger only if change has been sustained for required duration
+        fp1_triggered = fp1_above_threshold and fp1_duration >= self.change_duration_sec
+        fp2_triggered = fp2_above_threshold and fp2_duration >= self.change_duration_sec
 
         features = {
             'fp1_current': float(fp1_current),
             'fp2_current': float(fp2_current),
-            'fp1_change': float(fp1_change),
-            'fp2_change': float(fp2_change),
             'fp1_baseline': float(fp1_baseline),
             'fp2_baseline': float(fp2_baseline),
-            'fp1_zscore': float(fp1_zscore),
-            'fp2_zscore': float(fp2_zscore),
-            'is_spike': is_spike,
+            'fp1_pct_change': float(fp1_pct_change * 100),  # Show as percentage
+            'fp2_pct_change': float(fp2_pct_change * 100),
+            'fp1_duration': float(fp1_duration),
+            'fp2_duration': float(fp2_duration),
+            'fp1_triggered': fp1_triggered,
+            'fp2_triggered': fp2_triggered,
+            'threshold_pct': float(self.spike_threshold * 100),
+            'duration_required': float(self.change_duration_sec),
         }
 
         # Check cooldown
@@ -177,38 +190,38 @@ class CommandDetector:
                 timestamp=timestamp
             )
 
-        # Detect command based on spike
-        if is_spike:
-            # Determine direction based on which channel has larger change
-            total_change = fp1_change + fp2_change + 1e-6
-            fp1_ratio = fp1_change / total_change
-            fp2_ratio = fp2_change / total_change
+        # Detect commands - each channel independent
+        command = None
+        confidence = 0.0
 
-            diff = abs(fp1_ratio - fp2_ratio)
+        if fp1_triggered and fp2_triggered:
+            command = "both"
+            confidence = min(1.0, (fp1_pct_change + fp2_pct_change) / 2)
+            logger.info(f"BOTH: FP1 {fp1_pct_change*100:.1f}% for {fp1_duration:.2f}s, FP2 {fp2_pct_change*100:.1f}% for {fp2_duration:.2f}s")
+            # Reset change tracking
+            self.fp1_change_start = None
+            self.fp2_change_start = None
+        elif fp1_triggered:
+            command = config.Command.RIGHT
+            confidence = min(1.0, fp1_pct_change)
+            logger.info(f"RIGHT: FP1 changed {fp1_pct_change*100:.1f}% for {fp1_duration:.2f}s")
+            self.fp1_change_start = None
+        elif fp2_triggered:
+            command = config.Command.LEFT
+            confidence = min(1.0, fp2_pct_change)
+            logger.info(f"LEFT: FP2 changed {fp2_pct_change*100:.1f}% for {fp2_duration:.2f}s")
+            self.fp2_change_start = None
 
-            if diff > self.min_spike_diff:
-                if fp1_change > fp2_change:
-                    command = config.Command.RIGHT
-                    confidence = min(1.0, diff * 2)  # Scale diff to confidence
-                else:
-                    command = config.Command.LEFT
-                    confidence = min(1.0, diff * 2)
+        if command:
+            self.last_command_time = timestamp
+            return DetectionResult(
+                command=command,
+                confidence=confidence,
+                features=features,
+                timestamp=timestamp
+            )
 
-                self.last_command_time = timestamp
-                features['direction_diff'] = float(diff)
-                features['fp1_ratio'] = float(fp1_ratio)
-                features['fp2_ratio'] = float(fp2_ratio)
-
-                logger.info(f"Spike detected: {command} (FP1 change={fp1_change:.1f}, FP2 change={fp2_change:.1f}, diff={diff:.2f})")
-
-                return DetectionResult(
-                    command=command,
-                    confidence=confidence,
-                    features=features,
-                    timestamp=timestamp
-                )
-
-        features['status'] = 'no_spike'
+        features['status'] = 'no_change'
         return DetectionResult(
             command=None,
             confidence=0.0,
