@@ -26,11 +26,12 @@ def load_detection_settings() -> Dict:
     """Load detection settings from JSON config file."""
     config_file = Path("detection_multipliers.json")
     defaults = {
-        "ch1_threshold": 0.2,         # 20% change to trigger LEFT
+        "ch1_threshold": 0.2,         # 20% change to trigger FORWARD
         "ch3_threshold": 0.2,         # 20% change to trigger RIGHT
         "coupled_reduction": 0.5,     # Reduce other threshold by 50% when one triggers
         "change_duration_sec": 0.1,   # How long change must be sustained
         "cooldown_sec": 0.5,          # Time between commands
+        "dedupe_reset_sec": 1.0,      # Silence needed before same command can retrigger
     }
 
     if config_file.exists():
@@ -93,6 +94,11 @@ class CommandDetector:
         # Track when each channel started showing a change
         self.fp1_change_start = None
         self.fp2_change_start = None
+
+        # Deduplication: suppress consecutive same-commands
+        self.last_output_command = None  # Last command we actually output
+        self.command_end_time = 0.0      # When the last command "ended" (signal dropped)
+        self.dedupe_reset_sec = settings.get('dedupe_reset_sec', 1.0)  # After this silence, allow same command again
 
         logger.info(f"CommandDetector initialized - Ch1={self.ch1_threshold*100:.0f}% (LEFT), Ch3={self.ch3_threshold*100:.0f}% (RIGHT), coupled_reduction={self.coupled_reduction*100:.0f}%, duration={self.change_duration_sec}s, cooldown={self.cooldown_sec}s")
 
@@ -215,37 +221,66 @@ class CommandDetector:
             )
 
         # Detect commands - each channel independent
-        command = None
+        raw_command = None
         confidence = 0.0
 
         if fp1_triggered and fp2_triggered:
-            command = "both"
+            raw_command = "both"
             confidence = min(1.0, (fp1_pct_change + fp2_pct_change) / 2)
-            logger.info(f"BOTH: Ch1 {fp1_pct_change*100:.1f}% for {fp1_duration:.2f}s, Ch3 {fp2_pct_change*100:.1f}% for {fp2_duration:.2f}s")
             # Reset change tracking
             self.fp1_change_start = None
             self.fp2_change_start = None
         elif fp1_triggered:
-            command = config.Command.FORWARD
+            raw_command = config.Command.FORWARD
             confidence = min(1.0, fp1_pct_change)
-            logger.info(f"FORWARD: Ch1 changed {fp1_pct_change*100:.1f}% for {fp1_duration:.2f}s")
             self.fp1_change_start = None
         elif fp2_triggered:
-            command = config.Command.RIGHT
+            raw_command = config.Command.RIGHT
             confidence = min(1.0, fp2_pct_change)
-            logger.info(f"RIGHT: Ch3 changed {fp2_pct_change*100:.1f}% for {fp2_duration:.2f}s")
             self.fp2_change_start = None
 
-        if command:
-            self.last_command_time = timestamp
+        # ============ DEDUPLICATION LOGIC ============
+        # Only output a command if:
+        #   1. It's DIFFERENT from the last output command, OR
+        #   2. Enough silence has passed (signal dropped, user "released")
+
+        output_command = None
+
+        if raw_command:
+            # A command was detected
+            if raw_command != self.last_output_command:
+                # Different command - allow it through
+                output_command = raw_command
+                self.last_output_command = raw_command
+                self.last_command_time = timestamp
+                logger.info(f"{raw_command.upper()}: detected (new command)")
+            else:
+                # Same command as before - suppress it (dedupe)
+                features['status'] = 'dedupe_suppressed'
+                logger.debug(f"{raw_command.upper()}: suppressed (same as last)")
+        else:
+            # No command detected - signal dropped
+            if self.last_output_command is not None:
+                # Track when the command ended
+                if self.command_end_time == 0.0:
+                    self.command_end_time = timestamp
+
+                # After enough silence, reset so same command can trigger again
+                if (timestamp - self.command_end_time) >= self.dedupe_reset_sec:
+                    logger.debug(f"Dedupe reset after {self.dedupe_reset_sec}s silence")
+                    self.last_output_command = None
+                    self.command_end_time = 0.0
+
+        if output_command:
+            self.command_end_time = 0.0  # Reset end timer since command is active
             return DetectionResult(
-                command=command,
+                command=output_command,
                 confidence=confidence,
                 features=features,
                 timestamp=timestamp
             )
 
-        features['status'] = 'no_change'
+        features['status'] = features.get('status', 'no_change')
         return DetectionResult(
             command=None,
             confidence=0.0,

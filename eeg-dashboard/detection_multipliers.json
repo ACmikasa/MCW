@@ -4,5 +4,6 @@
   "coupled_reduction": 0.5,
   "change_duration_sec": 0.1,
   "cooldown_sec": 0.5,
-  "_comment": "ch1_threshold: FORWARD (0.2=20%). ch3_threshold: RIGHT. coupled_reduction: when one side triggers, reduce other threshold by this factor (0.5=50% reduction). change_duration_sec: sustain time. cooldown_sec: between commands."
+  "dedupe_reset_sec": 3.0,
+  "_comment": "ch1_threshold: FORWARD. ch3_threshold: RIGHT. coupled_reduction: reduce other threshold when one triggers. dedupe_reset_sec: seconds of silence before same command can trigger again."
 }
