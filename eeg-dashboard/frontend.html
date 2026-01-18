@@ -1586,37 +1586,35 @@
                 resultText = JSON.stringify(result);
             }
 
-            // Parse the response - handle "Yes"/"No" or JSON
+            // Parse the response - lowercase and look for keywords
+            const lowerText = resultText.toLowerCase();
             let isBlocked = false;
-            const trimmedText = resultText.trim().toLowerCase();
 
-            // Check for simple Yes/No responses first
-            if (trimmedText === 'yes' || trimmedText === 'yes.' || trimmedText.startsWith('yes,') || trimmedText.startsWith('yes ')) {
+            // Find first occurrence of key indicators
+            const yesIndex = lowerText.indexOf('yes');
+            const noIndex = lowerText.indexOf('no');
+            const trueIndex = lowerText.indexOf('true');
+            const falseIndex = lowerText.indexOf('false');
+
+            // Determine blocked state based on which keyword appears first
+            const blockedIndicators = [];
+            const clearIndicators = [];
+
+            if (yesIndex !== -1) blockedIndicators.push(yesIndex);
+            if (trueIndex !== -1) blockedIndicators.push(trueIndex);
+            if (noIndex !== -1) clearIndicators.push(noIndex);
+            if (falseIndex !== -1) clearIndicators.push(falseIndex);
+
+            const firstBlocked = blockedIndicators.length > 0 ? Math.min(...blockedIndicators) : Infinity;
+            const firstClear = clearIndicators.length > 0 ? Math.min(...clearIndicators) : Infinity;
+
+            // Whichever keyword appears first wins
+            if (firstBlocked < firstClear) {
                 isBlocked = true;
-            } else if (trimmedText === 'no' || trimmedText === 'no.' || trimmedText.startsWith('no,') || trimmedText.startsWith('no ')) {
+            } else if (firstClear < firstBlocked) {
                 isBlocked = false;
-            } else {
-                // Try JSON parsing
-                try {
-                    const jsonMatch = resultText.match(/\{[^}]*"blocked"\s*:\s*(true|false)[^}]*\}/i);
-                    if (jsonMatch) {
-                        const parsed = JSON.parse(jsonMatch[0]);
-                        isBlocked = parsed.blocked === true;
-                    } else if (resultText.includes('"blocked": true') || resultText.includes('"blocked":true')) {
-                        isBlocked = true;
-                    } else {
-                        // Fallback: check if "yes" appears before "no"
-                        const yesIndex = trimmedText.indexOf('yes');
-                        const noIndex = trimmedText.indexOf('no');
-                        if (yesIndex !== -1 && (noIndex === -1 || yesIndex < noIndex)) {
-                            isBlocked = true;
-                        }
-                    }
-                } catch (e) {
-                    // Last resort text check
-                    isBlocked = trimmedText.includes('yes') && !trimmedText.startsWith('no');
-                }
             }
+            // If neither found, default to false (clear)
 
             // Update global obstacle state
             obstacleDetected = isBlocked;
@@ -1665,7 +1663,7 @@
                 overshootVision = new RealtimeVision({
                     apiUrl: 'https://cluster1.overshoot.ai/api/v0.2',
                     apiKey: apiKey,
-                    prompt: 'Is there an obstacle blocking forward movement within 2 meters? Answer only YES or NO.',
+                    prompt: 'Is there an obstacle directly in front that would block a wheelchair? Answer with YES or NO, then briefly describe what you see.',
                     source: { type: 'camera', cameraFacing: 'environment' },
                     onResult: (result) => {
                         console.log('Overshoot result:', result);
