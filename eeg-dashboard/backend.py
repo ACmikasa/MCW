@@ -391,6 +391,12 @@ def detect_command() -> Optional[dict]:
         # Run detection
         result = state.command_detector.get_command(fp1_data, fp2_data)
 
+        # Print percentage changes for tuning
+        f = result.features
+        if 'fp1_pct_change' in f and 'fp2_pct_change' in f:
+            cmd_str = f" --> {result.command}" if result.command else ""
+            print(f"Ch1: {f['fp1_pct_change']:6.1f}% | Ch3: {f['fp2_pct_change']:6.1f}%{cmd_str}")
+
         # Update state
         if result.command:
             state.last_command = result.command

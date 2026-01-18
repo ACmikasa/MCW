@@ -98,6 +98,13 @@ class CommandDetector:
             self.spike_threshold = calibration_data['spike_threshold']
         logger.info(f"Spike threshold: {self.spike_threshold}")
 
+    def get_cooldown_remaining(self) -> float:
+        """Get remaining cooldown time in seconds."""
+        import time
+        elapsed = time.time() - self.last_command_time
+        remaining = self.cooldown_sec - elapsed
+        return max(0.0, remaining)
+
     def get_command(self, fp1_raw: np.ndarray, fp2_raw: np.ndarray) -> DetectionResult:
         """
         Detect commands based on percentage change from baseline.
