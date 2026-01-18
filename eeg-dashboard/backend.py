@@ -25,11 +25,22 @@ import signal
 import sys
 import time
 import csv
+import base64
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 import threading
 from collections import deque
+
+# Load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # dotenv not installed, use os.environ directly
+
+OVERSHOOT_API_KEY = os.environ.get("OVERSHOOT_API_KEY", "")
 
 from brainflow.board_shim import BoardShim, BrainFlowInputParams, BoardIds, BrainFlowError
 from brainflow.data_filter import DataFilter
@@ -37,8 +48,23 @@ import numpy as np
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 import uvicorn
+
+# Camera and Vision imports
+try:
+    import cv2
+    CAMERA_AVAILABLE = True
+except ImportError:
+    CAMERA_AVAILABLE = False
+    print("[WARNING] OpenCV not installed. Camera features disabled. Run: pip install opencv-python")
+
+try:
+    import anthropic
+    CLAUDE_AVAILABLE = True
+except ImportError:
+    CLAUDE_AVAILABLE = False
+    print("[WARNING] Anthropic SDK not installed. Vision detection disabled. Run: pip install anthropic")
 
 # Import wheelchair control modules
 from eeg_wheelchair_control import (
@@ -122,6 +148,17 @@ class EEGState:
         self.calibration_instruction = ""
         self.calibration_trial = 0
         self.calibration_total_trials = 0
+
+        # ----- Camera & Vision State -----
+        self.camera = None
+        self.camera_enabled = False
+        self.vision_enabled = False
+        self.last_frame = None
+        self.last_detection = None
+        self.last_detection_time = 0
+        self.object_detected = False
+        self.detection_message = ""
+        self.vision_check_interval = 1.0  # Check every 1 second
 
 
 state = EEGState()
@@ -630,6 +667,177 @@ def run_quick_calibration() -> dict:
         return {"success": False, "error": str(e)}
 
 # -----------------------------------------------------------------------------
+# Camera & Vision Detection
+# -----------------------------------------------------------------------------
+
+def start_camera() -> dict:
+    """Start the camera capture."""
+    global state
+
+    if not CAMERA_AVAILABLE:
+        return {"success": False, "error": "OpenCV not installed"}
+
+    if state.camera is not None:
+        return {"success": False, "error": "Camera already running"}
+
+    try:
+        state.camera = cv2.VideoCapture(0)
+        if not state.camera.isOpened():
+            state.camera = None
+            return {"success": False, "error": "Could not open camera"}
+
+        state.camera_enabled = True
+        print("[CAMERA] Camera started")
+        return {"success": True}
+
+    except Exception as e:
+        state.camera = None
+        return {"success": False, "error": str(e)}
+
+
+def stop_camera() -> dict:
+    """Stop the camera capture."""
+    global state
+
+    if state.camera is None:
+        return {"success": False, "error": "Camera not running"}
+
+    try:
+        state.camera.release()
+        state.camera = None
+        state.camera_enabled = False
+        state.last_frame = None
+        print("[CAMERA] Camera stopped")
+        return {"success": True}
+
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def get_camera_frame() -> Optional[bytes]:
+    """Capture a frame from the camera and return as JPEG bytes."""
+    global state
+
+    if state.camera is None or not state.camera_enabled:
+        return None
+
+    try:
+        ret, frame = state.camera.read()
+        if not ret:
+            return None
+
+        # Store the frame for vision detection
+        state.last_frame = frame
+
+        # Encode as JPEG
+        _, jpeg = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
+        return jpeg.tobytes()
+
+    except Exception as e:
+        print(f"[CAMERA] Error capturing frame: {e}")
+        return None
+
+
+def analyze_frame_with_claude() -> Optional[dict]:
+    """Send the current frame to Claude Vision API to detect obstacles."""
+    global state
+
+    if not CLAUDE_AVAILABLE:
+        return {"error": "Anthropic SDK not installed"}
+
+    if state.last_frame is None:
+        return {"error": "No frame available"}
+
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        return {"error": "ANTHROPIC_API_KEY not set"}
+
+    try:
+        # Encode frame as base64 JPEG
+        _, jpeg = cv2.imencode('.jpg', state.last_frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+        image_base64 = base64.standard_b64encode(jpeg.tobytes()).decode('utf-8')
+
+        # Call Claude Vision API
+        client = anthropic.Anthropic(api_key=api_key)
+
+        message = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=256,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": "image/jpeg",
+                                "data": image_base64,
+                            },
+                        },
+                        {
+                            "type": "text",
+                            "text": "You are an obstacle detection system for a wheelchair. Look at this image and determine if there is an obstacle directly in front that would block forward movement (within ~2 meters). Respond with ONLY valid JSON in this exact format: {\"object_detected\": true/false, \"message\": \"brief description\"}. If there's a wall, person, furniture, or any obstacle blocking the path ahead, set object_detected to true."
+                        }
+                    ],
+                }
+            ],
+        )
+
+        # Parse the response
+        response_text = message.content[0].text.strip()
+
+        # Try to extract JSON from response
+        try:
+            # Handle case where response might have markdown code blocks
+            if "```" in response_text:
+                response_text = response_text.split("```")[1]
+                if response_text.startswith("json"):
+                    response_text = response_text[4:]
+                response_text = response_text.strip()
+
+            result = json.loads(response_text)
+            state.object_detected = result.get("object_detected", False)
+            state.detection_message = result.get("message", "")
+            state.last_detection = result
+            state.last_detection_time = time.time()
+
+            status = "BLOCKED" if state.object_detected else "CLEAR"
+            print(f"[VISION] {status}: {state.detection_message}")
+
+            return result
+
+        except json.JSONDecodeError:
+            # If JSON parsing fails, try to extract info from text
+            is_blocked = "true" in response_text.lower() or "yes" in response_text.lower() or "obstacle" in response_text.lower()
+            result = {
+                "object_detected": is_blocked,
+                "message": response_text[:100]
+            }
+            state.object_detected = is_blocked
+            state.detection_message = response_text[:100]
+            state.last_detection = result
+            state.last_detection_time = time.time()
+            return result
+
+    except Exception as e:
+        print(f"[VISION] Error calling Claude API: {e}")
+        return {"error": str(e)}
+
+
+def vision_detection_loop():
+    """Background thread for periodic vision detection."""
+    global state
+
+    while state.vision_enabled:
+        if state.camera_enabled and state.last_frame is not None:
+            analyze_frame_with_claude()
+        time.sleep(state.vision_check_interval)
+
+    print("[VISION] Detection loop stopped")
+
+
+# -----------------------------------------------------------------------------
 # CSV Recording
 # -----------------------------------------------------------------------------
 
@@ -797,6 +1005,15 @@ async def websocket_endpoint(websocket: WebSocket):
                             "last_command_time": state.last_command_time,
                         }
 
+                    # Add vision detection data
+                    if state.vision_enabled:
+                        response["vision"] = {
+                            "enabled": True,
+                            "object_detected": state.object_detected,
+                            "message": state.detection_message,
+                            "last_check": state.last_detection_time,
+                        }
+
                     await websocket.send_json(response)
 
             # Send calibration progress if calibrating
@@ -887,6 +1104,29 @@ async def handle_command(websocket: WebSocket, message: dict):
         threading.Thread(target=run_cal, daemon=True).start()
         await websocket.send_json({"type": "calibration_started"})
 
+    # ----- Camera & Vision Commands -----
+
+    elif cmd == "camera_start":
+        result = start_camera()
+        await websocket.send_json({"type": "camera_status", **result, "enabled": result.get("success", False)})
+
+    elif cmd == "camera_stop":
+        result = stop_camera()
+        await websocket.send_json({"type": "camera_status", **result, "enabled": False})
+
+    elif cmd == "vision_enable":
+        if not state.camera_enabled:
+            await websocket.send_json({"type": "vision_status", "success": False, "error": "Camera not running"})
+        else:
+            state.vision_enabled = True
+            # Start vision detection loop in background
+            threading.Thread(target=vision_detection_loop, daemon=True).start()
+            await websocket.send_json({"type": "vision_status", "success": True, "enabled": True})
+
+    elif cmd == "vision_disable":
+        state.vision_enabled = False
+        await websocket.send_json({"type": "vision_status", "success": True, "enabled": False})
+
     elif cmd == "get_state":
         await websocket.send_json({
             "type": "state",
@@ -901,6 +1141,8 @@ async def handle_command(websocket: WebSocket, message: dict):
             "wheelchair_enabled": state.wheelchair_enabled,
             "has_calibration": state.calibration_data is not None,
             "calibration_data": state.calibration_data,
+            "camera_enabled": state.camera_enabled,
+            "vision_enabled": state.vision_enabled,
         })
 
 # -----------------------------------------------------------------------------
@@ -921,7 +1163,50 @@ async def health_check():
         "status": "ok",
         "board_connected": state.is_connected,
         "wheelchair_enabled": state.wheelchair_enabled,
+        "camera_enabled": state.camera_enabled,
+        "vision_enabled": state.vision_enabled,
     }
+
+
+@app.get("/video_feed")
+async def video_feed():
+    """Stream video frames as multipart JPEG."""
+    if not CAMERA_AVAILABLE:
+        return {"error": "OpenCV not installed"}
+
+    if not state.camera_enabled:
+        return {"error": "Camera not running"}
+
+    def generate_frames():
+        while state.camera_enabled:
+            frame_bytes = get_camera_frame()
+            if frame_bytes:
+                yield (b'--frame\r\n'
+                       b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+            time.sleep(0.033)  # ~30 fps
+
+    return StreamingResponse(
+        generate_frames(),
+        media_type='multipart/x-mixed-replace; boundary=frame'
+    )
+
+
+@app.get("/vision_status")
+async def get_vision_status():
+    """Get current vision detection status."""
+    return {
+        "camera_enabled": state.camera_enabled,
+        "vision_enabled": state.vision_enabled,
+        "object_detected": state.object_detected,
+        "message": state.detection_message,
+        "last_check": state.last_detection_time,
+    }
+
+
+@app.get("/overshoot_key")
+async def get_overshoot_key():
+    """Get Overshoot API key from environment."""
+    return {"key": OVERSHOOT_API_KEY}
 
 # -----------------------------------------------------------------------------
 # Shutdown Handler
@@ -930,6 +1215,13 @@ async def health_check():
 def shutdown_handler(signum, frame):
     """Graceful shutdown on Ctrl+C."""
     print("\nShutting down...")
+
+    # Stop vision detection
+    state.vision_enabled = False
+
+    # Stop camera
+    if state.camera_enabled:
+        stop_camera()
 
     if state.is_streaming:
         stop_streaming()

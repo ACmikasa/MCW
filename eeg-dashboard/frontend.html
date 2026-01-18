@@ -523,6 +523,52 @@
             overflow-y: auto;
         }
 
+        /* Vision toggle (Overshoot) */
+        #vision-switch .slider::before {
+            content: 'VISION OFF';
+        }
+        #vision-switch input:checked + .slider::before {
+            content: 'VISION ON';
+        }
+        #vision-switch input:checked + .slider {
+            background: linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%);
+        }
+
+        .vision-status {
+            background: #1a1a2e;
+            border-radius: 8px;
+            padding: 0.75rem;
+            margin-top: 0.5rem;
+            text-align: center;
+        }
+
+        .vision-indicator {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+
+        .vision-indicator.clear {
+            color: #2ed573;
+        }
+
+        .vision-indicator.blocked {
+            color: #ff4757;
+        }
+
+        .vision-icon {
+            font-size: 1.5rem;
+        }
+
+        .vision-message {
+            font-size: 0.75rem;
+            color: #888;
+            margin-top: 0.25rem;
+        }
+
         .delta-log {
             max-height: 120px;
             overflow-y: auto;
@@ -808,6 +854,25 @@
         <!-- Right Panel: Wheelchair Control -->
         <aside class="wheelchair-panel">
             <div class="control-section">
+                <h3>Overshoot Vision</h3>
+                <input type="text" id="overshoot-api-key" class="port-input" placeholder="Overshoot API Key..." style="margin-bottom: 0.5rem;">
+                <label class="toggle-switch" id="vision-switch">
+                    <input type="checkbox" id="vision-toggle">
+                    <span class="slider" style="font-size: 0.7rem;"></span>
+                </label>
+                <div id="video-container" style="display: none; margin-top: 0.5rem;">
+                    <video id="overshoot-video" autoplay muted playsinline style="width: 100%; border-radius: 8px; border: 2px solid #2a2a4a;"></video>
+                </div>
+                <div id="vision-status" class="vision-status" style="display: none;">
+                    <div class="vision-indicator" id="vision-indicator">
+                        <span class="vision-icon" id="vision-icon">--</span>
+                        <span class="vision-text" id="vision-text">Checking...</span>
+                    </div>
+                    <div class="vision-message" id="vision-message"></div>
+                </div>
+            </div>
+
+            <div class="control-section">
                 <h3>Wheelchair Control</h3>
                 <label class="toggle-switch">
                     <input type="checkbox" id="wheelchair-toggle">
@@ -897,7 +962,14 @@
         </aside>
     </div>
 
-    <script>
+    <!-- Overshoot SDK -->
+    <script type="module">
+        // Import Overshoot SDK
+        import { RealtimeVision } from 'https://esm.run/@overshoot/sdk';
+
+        // Overshoot Vision instance
+        let overshootVision = null;
+
         // =====================================================================
         // Configuration
         // =====================================================================
@@ -990,7 +1062,20 @@
             statLastCmd: document.getElementById('stat-last-cmd'),
             commandHistoryEl: document.getElementById('command-history'),
             deltaLog: document.getElementById('delta-log'),
+            // Overshoot Vision elements
+            overshootApiKey: document.getElementById('overshoot-api-key'),
+            visionToggle: document.getElementById('vision-toggle'),
+            videoContainer: document.getElementById('video-container'),
+            overshootVideo: document.getElementById('overshoot-video'),
+            visionStatus: document.getElementById('vision-status'),
+            visionIndicator: document.getElementById('vision-indicator'),
+            visionIcon: document.getElementById('vision-icon'),
+            visionText: document.getElementById('vision-text'),
+            visionMessage: document.getElementById('vision-message'),
         };
+
+        // Overshoot Vision state
+        let visionEnabled = false;
 
         // Delta log state
         let lastDeltaLogTime = 0;
@@ -1322,6 +1407,91 @@
             elements.calibrateBtn.disabled = !isStreaming;
         }
 
+        function updateVisionDisplay(result) {
+            if (!result) return;
+
+            // Parse the result from Overshoot - check if obstacle is mentioned
+            const resultText = typeof result === 'string' ? result : (result.result || '');
+            const lowerText = resultText.toLowerCase();
+
+            // Check for obstacle indicators
+            const isBlocked = lowerText.includes('obstacle') ||
+                             lowerText.includes('blocked') ||
+                             lowerText.includes('object') ||
+                             lowerText.includes('person') ||
+                             lowerText.includes('wall') ||
+                             lowerText.includes('barrier') ||
+                             lowerText.includes('yes');
+
+            elements.visionIndicator.className = 'vision-indicator ' + (isBlocked ? 'blocked' : 'clear');
+            elements.visionIcon.textContent = isBlocked ? '⛔' : '✓';
+            elements.visionText.textContent = isBlocked ? 'OBSTACLE' : 'CLEAR';
+            elements.visionMessage.textContent = resultText.substring(0, 100);
+
+            // Log detection
+            if (isBlocked) {
+                log(`Obstacle detected: ${resultText.substring(0, 50)}`, 'error');
+            }
+        }
+
+        // Start Overshoot Vision
+        async function startOvershootVision() {
+            const apiKey = elements.overshootApiKey.value.trim();
+            if (!apiKey) {
+                log('Please enter Overshoot API key', 'error');
+                elements.visionToggle.checked = false;
+                return;
+            }
+
+            try {
+                overshootVision = new RealtimeVision({
+                    apiUrl: 'https://cluster1.overshoot.ai/api/v0.2',
+                    apiKey: apiKey,
+                    prompt: 'Is there an obstacle directly in front that would block a wheelchair? Answer with YES or NO, then briefly describe what you see.',
+                    source: { type: 'camera', cameraFacing: 'environment' },
+                    onResult: (result) => {
+                        updateVisionDisplay(result);
+                    },
+                    onError: (error) => {
+                        log(`Vision error: ${error}`, 'error');
+                    }
+                });
+
+                // Get video stream to display
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+                elements.overshootVideo.srcObject = stream;
+
+                elements.videoContainer.style.display = 'block';
+                elements.visionStatus.style.display = 'block';
+                visionEnabled = true;
+                log('Overshoot Vision started', 'success');
+
+            } catch (error) {
+                log(`Failed to start vision: ${error.message}`, 'error');
+                elements.visionToggle.checked = false;
+                visionEnabled = false;
+            }
+        }
+
+        // Stop Overshoot Vision
+        function stopOvershootVision() {
+            if (overshootVision) {
+                overshootVision.stop?.();
+                overshootVision = null;
+            }
+
+            // Stop video stream
+            if (elements.overshootVideo.srcObject) {
+                elements.overshootVideo.srcObject.getTracks().forEach(track => track.stop());
+                elements.overshootVideo.srcObject = null;
+            }
+
+            elements.videoContainer.style.display = 'none';
+            elements.visionStatus.style.display = 'none';
+            visionEnabled = false;
+            log('Overshoot Vision stopped', 'info');
+        }
+
         // =====================================================================
         // WebSocket Connection
         // =====================================================================
@@ -1462,6 +1632,7 @@
                     }
                     break;
 
+
                 case 'error':
                     log(msg.error, 'error');
                     break;
@@ -1574,6 +1745,16 @@
             }
         };
 
+        // Overshoot Vision controls
+        elements.visionToggle.onchange = () => {
+            const enabled = elements.visionToggle.checked;
+            if (enabled) {
+                startOvershootVision();
+            } else {
+                stopOvershootVision();
+            }
+        };
+
         // =====================================================================
         // Initialization
         // =====================================================================
@@ -1581,7 +1762,20 @@
         initChart();
         connectWebSocket();
 
+        // Load Overshoot API key from backend
+        fetch('/overshoot_key')
+            .then(res => res.json())
+            .then(data => {
+                if (data.key) {
+                    elements.overshootApiKey.value = data.key;
+                }
+            })
+            .catch(() => {});
+
         window.addEventListener('beforeunload', () => {
+            // Stop Overshoot vision
+            stopOvershootVision();
+
             if (ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({ command: 'wheelchair_disable' }));
                 ws.send(JSON.stringify({ command: 'stop' }));
