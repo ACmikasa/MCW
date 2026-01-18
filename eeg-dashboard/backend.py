@@ -76,6 +76,9 @@ from eeg_wheelchair_control import (
 )
 from eeg_wheelchair_control import config as wc_config
 
+# Import Arduino control
+from arduino_control import arduino, ArduinoController
+
 # -----------------------------------------------------------------------------
 # Configuration
 # -----------------------------------------------------------------------------
@@ -1127,6 +1130,39 @@ async def handle_command(websocket: WebSocket, message: dict):
         state.vision_enabled = False
         await websocket.send_json({"type": "vision_status", "success": True, "enabled": False})
 
+    # ----- Arduino Commands -----
+
+    elif cmd == "arduino_list_ports":
+        ports = arduino.list_ports()
+        await websocket.send_json({"type": "arduino_ports", "ports": ports})
+
+    elif cmd == "arduino_connect":
+        port = message.get("port")
+        if not port:
+            await websocket.send_json({"type": "arduino_status", "success": False, "error": "No port specified"})
+        else:
+            result = arduino.connect(port)
+            await websocket.send_json({"type": "arduino_status", **result, "connected": result.get("success", False)})
+
+    elif cmd == "arduino_disconnect":
+        result = arduino.disconnect()
+        await websocket.send_json({"type": "arduino_status", **result, "connected": False})
+
+    elif cmd == "arduino_test":
+        # Test command - cycle through movements
+        test_cmd = message.get("test_command", "stop")
+        if test_cmd == "forward":
+            arduino.forward()
+        elif test_cmd == "right":
+            arduino.right()
+        elif test_cmd == "left":
+            arduino.left()
+        elif test_cmd == "backward":
+            arduino.backward()
+        else:
+            arduino.stop()
+        await websocket.send_json({"type": "arduino_test", "command": test_cmd})
+
     elif cmd == "get_state":
         await websocket.send_json({
             "type": "state",
@@ -1143,6 +1179,7 @@ async def handle_command(websocket: WebSocket, message: dict):
             "calibration_data": state.calibration_data,
             "camera_enabled": state.camera_enabled,
             "vision_enabled": state.vision_enabled,
+            "arduino": arduino.get_status(),
         })
 
 # -----------------------------------------------------------------------------
@@ -1215,6 +1252,12 @@ async def get_overshoot_key():
 def shutdown_handler(signum, frame):
     """Graceful shutdown on Ctrl+C."""
     print("\nShutting down...")
+
+    # Stop Arduino motors and disconnect
+    if arduino.is_connected:
+        print("[ARDUINO] Stopping motors...")
+        arduino.stop()
+        arduino.disconnect()
 
     # Stop vision detection
     state.vision_enabled = False
