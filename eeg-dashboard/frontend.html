@@ -1494,7 +1494,7 @@
 
             console.log('Processing vision result:', result, typeof result);
 
-            // Parse the result from Overshoot - handle different formats
+            // Get the result text from various possible formats
             let resultText = '';
             if (typeof result === 'string') {
                 resultText = result;
@@ -1507,35 +1507,39 @@
             } else if (result.content) {
                 resultText = result.content;
             } else {
-                // Try to stringify the object to see what we got
                 resultText = JSON.stringify(result);
             }
 
-            const lowerText = resultText.toLowerCase();
+            // Try to parse as JSON for structured response
+            let isBlocked = false;
+            try {
+                // Extract JSON from the response (might have extra text)
+                const jsonMatch = resultText.match(/\{[^}]*"blocked"\s*:\s*(true|false)[^}]*\}/i);
+                if (jsonMatch) {
+                    const parsed = JSON.parse(jsonMatch[0]);
+                    isBlocked = parsed.blocked === true;
+                } else if (resultText.includes('"blocked": true') || resultText.includes('"blocked":true')) {
+                    isBlocked = true;
+                } else if (resultText.includes('"blocked": false') || resultText.includes('"blocked":false')) {
+                    isBlocked = false;
+                } else {
+                    // Fallback to text analysis
+                    const lowerText = resultText.toLowerCase();
+                    isBlocked = (lowerText.includes('true') || lowerText.includes('yes') || lowerText.includes('obstacle')) &&
+                               !(lowerText.includes('false') || lowerText.includes('no obstacle'));
+                }
+            } catch (e) {
+                // Fallback to text analysis
+                const lowerText = resultText.toLowerCase();
+                isBlocked = lowerText.includes('true') || lowerText.includes('blocked": true');
+            }
 
-            // Check for obstacle indicators
-            const isBlocked = lowerText.includes('obstacle') ||
-                             lowerText.includes('blocked') ||
-                             lowerText.includes('object') ||
-                             lowerText.includes('person') ||
-                             lowerText.includes('wall') ||
-                             lowerText.includes('barrier') ||
-                             lowerText.includes('yes');
+            elements.visionStatusInline.className = 'vision-status-inline ' + (isBlocked ? 'blocked' : 'clear');
+            elements.visionIconInline.textContent = isBlocked ? '⛔' : '✓';
+            elements.visionTextInline.textContent = isBlocked ? 'BLOCKED' : 'CLEAR';
+            elements.visionMessageInline.textContent = isBlocked ? 'Obstacle detected ahead' : 'Path is clear';
 
-            const isClear = lowerText.includes('no') ||
-                           lowerText.includes('clear') ||
-                           lowerText.includes('empty') ||
-                           lowerText.includes('nothing');
-
-            const showBlocked = isBlocked && !isClear;
-
-            elements.visionStatusInline.className = 'vision-status-inline ' + (showBlocked ? 'blocked' : 'clear');
-            elements.visionIconInline.textContent = showBlocked ? '⛔' : '✓';
-            elements.visionTextInline.textContent = showBlocked ? 'OBSTACLE' : 'CLEAR';
-            elements.visionMessageInline.textContent = resultText.substring(0, 200);
-
-            // Log detection
-            log(`Vision: ${resultText.substring(0, 60)}`, showBlocked ? 'error' : 'info');
+            console.log('Vision blocked:', isBlocked);
         }
 
         // Start Overshoot Vision
@@ -1567,7 +1571,7 @@
                 overshootVision = new RealtimeVision({
                     apiUrl: 'https://cluster1.overshoot.ai/api/v0.2',
                     apiKey: apiKey,
-                    prompt: 'Is there an obstacle directly in front that would block a wheelchair? Answer YES if blocked or NO if clear, then describe briefly.',
+                    prompt: 'You are an obstacle detector for a wheelchair. Look at the image and determine if there is an obstacle blocking forward movement within 2 meters. Respond with ONLY valid JSON: {"blocked": true} or {"blocked": false}',
                     source: { type: 'camera', cameraFacing: 'environment' },
                     onResult: (result) => {
                         console.log('Overshoot result:', result);
