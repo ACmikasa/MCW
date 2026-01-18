@@ -391,11 +391,16 @@ def detect_command() -> Optional[dict]:
         # Run detection
         result = state.command_detector.get_command(fp1_data, fp2_data)
 
-        # Print percentage changes for tuning
+        # Print percentage changes every 0.5 seconds for tuning
         f = result.features
+        current_time = time.time()
+        if not hasattr(state, '_last_delta_print'):
+            state._last_delta_print = 0
         if 'fp1_pct_change' in f and 'fp2_pct_change' in f:
-            cmd_str = f" --> {result.command}" if result.command else ""
-            print(f"Ch1: {f['fp1_pct_change']:6.1f}% | Ch3: {f['fp2_pct_change']:6.1f}%{cmd_str}")
+            if current_time - state._last_delta_print >= 0.5 or result.command:
+                cmd_str = f" --> {result.command}" if result.command else ""
+                print(f"Ch1: {f['fp1_pct_change']:6.1f}% | Ch3: {f['fp2_pct_change']:6.1f}%{cmd_str}")
+                state._last_delta_print = current_time
 
         # Update state
         if result.command:
