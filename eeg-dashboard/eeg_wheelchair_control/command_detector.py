@@ -221,23 +221,23 @@ class CommandDetector:
         if fp1_triggered and fp2_triggered:
             command = "both"
             confidence = min(1.0, (fp1_pct_change + fp2_pct_change) / 2)
-            logger.info(f"BOTH: Ch1 {fp1_pct_change*100:.1f}% for {fp1_duration:.2f}s, Ch3 {fp2_pct_change*100:.1f}% for {fp2_duration:.2f}s")
-            # Reset change tracking
+            print(f"[DETECT] ✓ BOTH triggered (Ch1: {fp1_pct_change*100:.1f}%, Ch3: {fp2_pct_change*100:.1f}%)")
             self.fp1_change_start = None
             self.fp2_change_start = None
         elif fp1_triggered:
             command = config.Command.FORWARD
             confidence = min(1.0, fp1_pct_change)
-            logger.info(f"FORWARD: Ch1 changed {fp1_pct_change*100:.1f}% for {fp1_duration:.2f}s")
+            print(f"[DETECT] ✓ FORWARD triggered (Ch1: {fp1_pct_change*100:.1f}%)")
             self.fp1_change_start = None
         elif fp2_triggered:
             command = config.Command.RIGHT
             confidence = min(1.0, fp2_pct_change)
-            logger.info(f"RIGHT: Ch3 changed {fp2_pct_change*100:.1f}% for {fp2_duration:.2f}s")
+            print(f"[DETECT] ✓ RIGHT triggered (Ch3: {fp2_pct_change*100:.1f}%)")
             self.fp2_change_start = None
 
         if command:
             self.last_command_time = timestamp
+            print(f"[DETECT] Command output: {command}")
             return DetectionResult(
                 command=command,
                 confidence=confidence,

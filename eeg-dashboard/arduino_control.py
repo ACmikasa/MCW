@@ -20,6 +20,7 @@ class ArduinoController:
         self.port: Optional[str] = None
         self.is_connected = False
         self.lock = threading.Lock()
+        self._last_logged_cmd = None  # Track last logged command to reduce noise
 
     def list_ports(self) -> list:
         """List available serial ports."""
@@ -92,15 +93,21 @@ class ArduinoController:
     # ===================== High-level commands =====================
 
     def forward(self) -> bool:
-        print("[ARDUINO] -> FORWARD")
+        if self._last_logged_cmd != "F":
+            print("[ARDUINO] Sending: F (forward)")
+            self._last_logged_cmd = "F"
         return self._send("F")
 
     def right(self) -> bool:
-        print("[ARDUINO] -> RIGHT")
+        if self._last_logged_cmd != "R":
+            print("[ARDUINO] Sending: R (right)")
+            self._last_logged_cmd = "R"
         return self._send("R")
 
     def stop(self) -> bool:
-        print("[ARDUINO] -> STOP")
+        if self._last_logged_cmd != "S":
+            print("[ARDUINO] Sending: S (stop)")
+            self._last_logged_cmd = "S"
         return self._send("S")
 
     def get_status(self) -> dict:

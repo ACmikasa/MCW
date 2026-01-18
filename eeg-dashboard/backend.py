@@ -494,6 +494,10 @@ def detect_command() -> Optional[dict]:
                     ((now - state._last_arduino_send_time) >= KEEPALIVE_INTERVAL)
                 )
                 if should_send:
+                    # Log when movement starts (not keepalives)
+                    if state._active_action != state._last_arduino_cmd:
+                        print(f"[MOVE] ▶ {state._active_action.upper()} started")
+
                     state._last_arduino_cmd = state._active_action
                     state._last_arduino_send_time = now
 
@@ -505,6 +509,7 @@ def detect_command() -> Optional[dict]:
             else:
                 # Stop ONCE when transitioning into stop
                 if state._last_arduino_cmd != "stop":
+                    print(f"[MOVE] ■ STOPPED (was {state._last_arduino_cmd})")
                     state._last_arduino_cmd = "stop"
                     state._last_arduino_send_time = now
                     arduino.stop()
