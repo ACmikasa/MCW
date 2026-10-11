@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OpenBCI 脑电仪表盘与轮椅控制</title>
+    <title>脑电仪表盘</title>
+    <link rel="stylesheet" href="/assets/legacy-shell.css">
     <style>
         :root {
             --glass-bg: rgba(28, 28, 30, 0.65);
@@ -898,10 +899,15 @@
             <div class="subtitle">Cyton + Daisy | 16 通道 | 轮椅控制</div>
         </div>
         <div class="status-badges">
+            <a class="offline-link" href="/">首页</a>
             <a class="offline-link" href="/offline" aria-label="打开离线全局检测">
                 <span aria-hidden="true">⌁</span>
                 <span>离线检测</span>
             </a>
+            <a id="data-link" class="offline-link" href="/data" style="display:none">数据管理</a>
+            <a id="admin-link" class="offline-link" href="/admin" style="display:none">用户管理</a>
+            <span id="current-user" style="font-size:.78rem;color:var(--text-secondary)"></span>
+            <button id="logout-button" class="offline-link" type="button" style="cursor:pointer">退出</button>
             <div id="status-badge" class="status-badge disconnected">
                 <span class="status-dot"></span>
                 <span id="status-text">未连接</span>
@@ -1770,5 +1776,18 @@
             }
         });
     </script>
+    <script>
+        fetch('/api/auth/me').then(async response => {
+            if (!response.ok) { location.href = '/login'; return; }
+            const user = await response.json();
+            document.getElementById('current-user').textContent = user.display_name;
+            if (user.permissions.includes('data:view')) document.getElementById('data-link').style.display = 'inline-flex';
+            if (user.permissions.includes('users:manage')) document.getElementById('admin-link').style.display = 'inline-flex';
+        });
+        document.getElementById('logout-button').addEventListener('click', async () => {
+            await fetch('/api/auth/logout', { method: 'POST' }); location.href = '/login';
+        });
+    </script>
+    <script src="/assets/legacy-shell.js"></script>
 </body>
 </html>

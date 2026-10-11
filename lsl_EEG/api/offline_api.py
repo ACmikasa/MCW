@@ -8,9 +8,10 @@ from pathlib import Path
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 
 from services.offline_service import offline_service
+from services.data_service import DataService
 
 
-def build_offline_router(upload_dir: Path) -> APIRouter:
+def build_offline_router(upload_dir: Path, data_service: DataService | None = None) -> APIRouter:
     router = APIRouter(prefix="/api/offline", tags=["offline"])
     upload_dir.mkdir(parents=True, exist_ok=True)
 
@@ -32,6 +33,8 @@ def build_offline_router(upload_dir: Path) -> APIRouter:
         destination.write_bytes(file_bytes)
 
         job_id = offline_service.create_job(destination, original_name, profile, window)
+        if data_service is not None:
+            data_service.register(destination, original_name, job_id)
         background_tasks.add_task(offline_service.run_job, job_id)
         return {"job_id": job_id, "status": "queued"}
 

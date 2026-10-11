@@ -4,5 +4,9 @@ __pycache__/
 *.py[cod]
 uploads/*
 results/*
+data/auth/*.csv
+data/auth/*.tmp
+data/system/*.csv
+data/system/*.tmp
 !uploads/.gitkeep
 !results/.gitkeep

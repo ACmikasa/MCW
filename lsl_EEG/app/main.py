@@ -14,28 +14,151 @@ from pathlib import Path
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse
+from fastapi import Depends, FastAPI, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 import uvicorn
 
 from acquisition.lsl_receiver import LSLReceiver
+from api.auth_api import SESSION_COOKIE, build_auth_router
 from api.offline_api import build_offline_router
-from app.config import BASE_DIR, UPLOAD_DIR, WEB_DIR, stream_name, stream_type
+from api.system_api import build_system_router
+from app.config import SYSTEM_DATA_DIR, UPLOAD_DIR, WEB_DIR, auth_data_dir, session_hours, stream_name, stream_type
+from services.auth_service import AuthService
+from services.data_service import DataService
+from services.history_service import HistoryService
+from services.navigation_service import NavigationService
 
 
 receiver = LSLReceiver(stream_name=stream_name(), stream_type=stream_type())
+auth_service = AuthService(auth_data_dir(), session_hours())
+navigation_service = NavigationService(SYSTEM_DATA_DIR)
+data_service = DataService(UPLOAD_DIR, SYSTEM_DATA_DIR)
+history_service = HistoryService(SYSTEM_DATA_DIR)
 app = FastAPI(title="LSL EEG Dashboard")
-app.include_router(build_offline_router(UPLOAD_DIR))
+app.mount("/assets", StaticFiles(directory=WEB_DIR / "assets"), name="assets")
+auth_router = build_auth_router(auth_service)
+app.include_router(auth_router)
+app.include_router(
+    build_offline_router(UPLOAD_DIR, data_service),
+    dependencies=[Depends(auth_router.require("offline:analyze"))],  # type: ignore[attr-defined]
+)
+app.include_router(build_system_router(
+    auth_service, navigation_service, data_service, history_service, receiver,
+    auth_router.current_user, auth_router.require,  # type: ignore[attr-defined]
+))
+
+
+def _page_user(request: Request, permission: str | None = None) -> dict | None:
+    user = auth_service.user_from_token(request.cookies.get(SESSION_COOKIE))
+    if user is None or (permission and permission not in user["permissions"]):
+        return None
+    return user
+
+
+def _forbidden() -> HTMLResponse:
+    return HTMLResponse(
+        "<meta charset='utf-8'><title>无权访问</title>"
+        "<body style='font-family:sans-serif;background:#07101f;color:#fff;padding:48px'>"
+        "<h1>无权访问</h1><p>当前账号没有访问此页面的权限。</p><a href='/' style='color:#72b5ff'>返回首页</a></body>",
+        status_code=403,
+    )
+
+
+@app.get("/login")
+async def login_page(request: Request):
+    user = _page_user(request)
+    if user:
+        if "dashboard:view" in user["permissions"]:
+            return RedirectResponse("/")
+        if "realtime:view" in user["permissions"]:
+            return RedirectResponse("/realtime")
+        if "offline:analyze" in user["permissions"]:
+            return RedirectResponse("/offline")
+        if "history:view" in user["permissions"]:
+            return RedirectResponse("/history")
+        if "analysis:run" in user["permissions"]:
+            return RedirectResponse("/analysis")
+        if "data:view" in user["permissions"]:
+            return RedirectResponse("/data")
+        if "navigation:manage" in user["permissions"]:
+            return RedirectResponse("/navigation")
+        if "users:manage" in user["permissions"]:
+            return RedirectResponse("/admin")
+        return _forbidden()
+    return FileResponse(WEB_DIR / "login.html")
 
 
 @app.get("/")
-async def index():
+async def index(request: Request):
+    if not _page_user(request):
+        return RedirectResponse("/login")
+    if not _page_user(request, "dashboard:view"):
+        return _forbidden()
+    return FileResponse(WEB_DIR / "dashboard.html")
+
+
+@app.get("/realtime")
+async def realtime_index(request: Request):
+    if not _page_user(request):
+        return RedirectResponse("/login")
+    if not _page_user(request, "realtime:view"):
+        return _forbidden()
     return FileResponse(WEB_DIR / "frontend.html")
 
 
 @app.get("/offline")
-async def offline_index():
+async def offline_index(request: Request):
+    if not _page_user(request):
+        return RedirectResponse("/login")
+    if not _page_user(request, "offline:analyze"):
+        return _forbidden()
     return FileResponse(WEB_DIR / "offline-detection.html")
+
+
+@app.get("/admin")
+async def admin_index(request: Request):
+    if not _page_user(request):
+        return RedirectResponse("/login")
+    if not _page_user(request, "users:manage"):
+        return _forbidden()
+    return FileResponse(WEB_DIR / "admin.html")
+
+
+@app.get("/navigation")
+async def navigation_index(request: Request):
+    if not _page_user(request):
+        return RedirectResponse("/login")
+    if not _page_user(request, "navigation:manage"):
+        return _forbidden()
+    return FileResponse(WEB_DIR / "navigation.html")
+
+
+@app.get("/data")
+async def data_index(request: Request):
+    if not _page_user(request):
+        return RedirectResponse("/login")
+    if not _page_user(request, "data:view"):
+        return _forbidden()
+    return FileResponse(WEB_DIR / "data-management.html")
+
+
+@app.get("/history")
+async def history_index(request: Request):
+    if not _page_user(request):
+        return RedirectResponse("/login")
+    if not _page_user(request, "history:view"):
+        return _forbidden()
+    return FileResponse(WEB_DIR / "history.html")
+
+
+@app.get("/analysis")
+async def analysis_index(request: Request):
+    if not _page_user(request):
+        return RedirectResponse("/login")
+    if not _page_user(request, "analysis:run"):
+        return _forbidden()
+    return FileResponse(WEB_DIR / "analysis.html")
 
 
 @app.get("/health")
@@ -44,7 +167,7 @@ async def health():
 
 
 @app.get("/overshoot_key")
-async def overshoot_key():
+async def overshoot_key(_: dict = Depends(auth_router.require("realtime:control"))):  # type: ignore[attr-defined]
     return {"key": os.environ.get("OVERSHOOT_API_KEY", "")}
 
 
@@ -67,10 +190,12 @@ def state_message() -> dict:
     }
 
 
-async def handle_command(websocket: WebSocket, message: dict) -> None:
+async def handle_command(websocket: WebSocket, message: dict, user: dict) -> None:
     command = message.get("command")
     if command == "get_state":
         await websocket.send_json(state_message())
+    elif "realtime:control" not in user["permissions"]:
+        await websocket.send_json({"type": "error", "error": "没有实时控制权限"})
     elif command == "detect_ports":
         status = receiver.status()
         label = f"LSL: {status['name']}" if status["name"] else "LSL 数据流（自动发现）"
@@ -92,11 +217,15 @@ async def handle_command(websocket: WebSocket, message: dict) -> None:
     elif command == "start":
         receiver.resume_streaming()
         connected = receiver.status()["connected"]
+        if connected:
+            history_service.start(user, receiver.status())
         await websocket.send_json({"type": "start_result", "success": connected, "error": "尚未连接 LSL 数据流" if not connected else ""})
     elif command == "stop":
         receiver.stop_streaming()
+        history_service.stop(user["id"], receiver.status())
         await websocket.send_json({"type": "stop_result", "success": True, "total_samples": receiver.status()["total_samples"]})
     elif command == "disconnect":
+        history_service.stop(user["id"], receiver.status(), "interrupted")
         receiver.disconnect()
         await websocket.send_json({"type": "disconnect_result", "success": True})
     elif command == "arduino_list_ports":
@@ -107,6 +236,10 @@ async def handle_command(websocket: WebSocket, message: dict) -> None:
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
+    user = auth_service.user_from_token(websocket.cookies.get(SESSION_COOKIE))
+    if user is None or "realtime:view" not in user["permissions"]:
+        await websocket.close(code=4401)
+        return
     await websocket.accept()
     last_sequence = 0
     last_state_signature = None
@@ -114,7 +247,7 @@ async def websocket_endpoint(websocket: WebSocket):
         while True:
             try:
                 message = await asyncio.wait_for(websocket.receive_json(), timeout=0.02)
-                await handle_command(websocket, message)
+                await handle_command(websocket, message, user)
             except asyncio.TimeoutError:
                 pass
 
