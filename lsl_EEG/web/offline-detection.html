@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>离线全局检测 | OpenBCI</title>
+    <link rel="stylesheet" href="/assets/legacy-shell.css">
     <style>
         :root {
             --bg: #080c16;
@@ -141,7 +142,11 @@
         </div>
         <div class="top-actions">
             <span id="status-chip" class="status-chip">等待文件</span>
-            <a class="back-link" href="/">返回实时监测</a>
+            <a class="back-link" href="/">首页</a>
+            <a id="data-link" class="back-link" href="/data" style="display:none">数据管理</a>
+            <a id="admin-link" class="back-link" href="/admin" style="display:none">用户管理</a>
+            <a class="back-link" href="/realtime">实时监测</a>
+            <button id="logout-button" class="back-link" style="cursor:pointer">退出</button>
         </div>
     </header>
 
@@ -286,6 +291,16 @@
         });
 
         document.getElementById('reset-btn').addEventListener('click', () => window.location.reload());
+        fetch('/api/auth/me').then(async response => {
+            if (!response.ok) { location.href = '/login'; return; }
+            const user = await response.json();
+            if (user.permissions.includes('data:view')) document.getElementById('data-link').style.display = 'inline-flex';
+            if (user.permissions.includes('users:manage')) document.getElementById('admin-link').style.display = 'inline-flex';
+        });
+        document.getElementById('logout-button').addEventListener('click', async () => {
+            await fetch('/api/auth/logout', { method: 'POST' }); location.href = '/login';
+        });
     </script>
+    <script src="/assets/legacy-shell.js"></script>
 </body>
 </html>

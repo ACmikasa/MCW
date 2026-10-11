@@ -15,8 +15,15 @@ cd lsl_EEG
 
 浏览器打开：
 
-- 实时监测：<http://127.0.0.1:8081/>
+- 登录页面：<http://127.0.0.1:8081/login>
+- 首页仪表盘：<http://127.0.0.1:8081/>
+- 实时监测：<http://127.0.0.1:8081/realtime>
 - 离线检测：<http://127.0.0.1:8081/offline>
+- 历史记录：<http://127.0.0.1:8081/history>
+- 数据分析：<http://127.0.0.1:8081/analysis>
+- 数据管理：<http://127.0.0.1:8081/data>
+- 导航管理：<http://127.0.0.1:8081/navigation>
+- 用户与权限管理：<http://127.0.0.1:8081/admin>
 - 健康检查：<http://127.0.0.1:8081/health>
 
 也可以直接从 `lsl_EEG` 目录启动自己的虚拟环境：
@@ -85,6 +92,32 @@ LSL_STREAM_TYPE=EEG
 ```
 
 如果使用 `.env`，请复制 `.env.example` 为 `.env`，不要把 `.env` 提交到 Git。
+
+## 用户与权限管理
+
+首次启动会创建管理员：
+
+```text
+用户名：admin
+密码：Admin@123456
+```
+
+请在首次登录后进入“用户管理 → 修改密码”立即更换密码。部署前也可以在 `.env` 中设置
+`AUTH_ADMIN_USERNAME` 和 `AUTH_ADMIN_PASSWORD`；这两个值仅在认证 CSV 首次创建时生效。
+
+系统预置角色：
+
+- `admin`（系统管理员）：拥有全部权限。
+- `operator`（操作员）：可以查看和控制实时采集，并执行离线分析。
+- `viewer`（观察员）：只能查看实时监测。
+
+管理员可以创建、编辑、停用、删除用户，重置用户密码，以及创建角色并组合以下权限：
+`dashboard:view`、`realtime:view`、`realtime:control`、`offline:analyze`、`history:view`、
+`analysis:run`、`data:view`、
+`data:manage`、`navigation:manage`、`users:manage`、`roles:manage`。
+密码使用 PBKDF2-SHA256 加盐保存，会话凭据使用 HttpOnly、SameSite Cookie。用户、角色、
+角色权限、权限定义和会话分别保存在 `data/auth/` 下的 CSV 文件中，便于复制与迁移；该目录
+已加入 `.gitignore`，不要将账号和密码哈希提交到版本库。可以通过 `AUTH_DATA_DIR` 指定其他目录。
 
 ## 实时数据流
 

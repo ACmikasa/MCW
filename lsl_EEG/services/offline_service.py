@@ -79,6 +79,11 @@ class OfflineService:
             public = {key: value for key, value in job.items() if key != "path"}
             return dict(public)
 
+    def list_jobs(self, limit: int = 10) -> list[dict[str, Any]]:
+        with self._lock:
+            jobs = [{key: value for key, value in job.items() if key != "path"} for job in self._jobs.values()]
+        return sorted(jobs, key=lambda job: job["created_at"], reverse=True)[:limit]
+
     def _update(self, job_id: str, progress: int, message: str) -> None:
         with self._lock:
             if job_id in self._jobs:
