@@ -124,6 +124,33 @@
         .status-badges {
             display: flex;
             gap: var(--space-sm);
+            align-items: center;
+        }
+
+        .offline-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            padding: 0.5rem 0.8rem;
+            color: #c8dcff;
+            text-decoration: none;
+            border: 1px solid rgba(96, 165, 250, 0.35);
+            border-radius: 10px;
+            background: rgba(37, 99, 235, 0.14);
+            font-size: 0.78rem;
+            font-weight: 600;
+            transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+        }
+
+        .offline-link:hover {
+            background: rgba(37, 99, 235, 0.28);
+            border-color: rgba(147, 197, 253, 0.7);
+            transform: translateY(-1px);
+        }
+
+        .offline-link:focus-visible {
+            outline: 2px solid #93c5fd;
+            outline-offset: 3px;
         }
 
         .status-badge {
@@ -871,6 +898,10 @@
             <div class="subtitle">Cyton + Daisy | 16 通道 | 轮椅控制</div>
         </div>
         <div class="status-badges">
+            <a class="offline-link" href="/offline" aria-label="打开离线全局检测">
+                <span aria-hidden="true">⌁</span>
+                <span>离线检测</span>
+            </a>
             <div id="status-badge" class="status-badge disconnected">
                 <span class="status-dot"></span>
                 <span id="status-text">未连接</span>

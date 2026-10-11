@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>离线全局检测 | OpenBCI</title>
+    <style>
+        :root {
+            --bg: #080c16;
+            --panel: rgba(21, 27, 42, 0.88);
+            --panel-soft: rgba(255, 255, 255, 0.035);
+            --border: rgba(148, 163, 184, 0.18);
+            --text: #f5f7fb;
+            --muted: #8e9aae;
+            --blue: #60a5fa;
+            --green: #45d483;
+            --orange: #f5b84b;
+            --red: #ff6d76;
+            --radius: 18px;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+        }
+
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            color: var(--text);
+            background:
+                radial-gradient(circle at 12% 0%, rgba(37, 99, 235, 0.18), transparent 32%),
+                radial-gradient(circle at 100% 100%, rgba(16, 185, 129, 0.09), transparent 28%),
+                var(--bg);
+        }
+
+        button, input, select { font: inherit; }
+        button { cursor: pointer; }
+
+        .topbar {
+            min-height: 86px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 24px;
+            padding: 18px 28px;
+            border-bottom: 1px solid var(--border);
+            background: rgba(10, 14, 25, 0.82);
+            backdrop-filter: blur(18px);
+        }
+
+        .eyebrow { color: var(--blue); font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; }
+        h1, h2, h3, p { margin: 0; }
+        h1 { margin-top: 5px; font-size: 1.45rem; letter-spacing: -0.025em; }
+        .subtitle { margin-top: 5px; color: var(--muted); font-size: 0.8rem; }
+        .top-actions { display: flex; align-items: center; gap: 12px; }
+
+        .back-link, .status-chip, .primary-btn, .ghost-btn {
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            color: var(--text);
+            background: var(--panel-soft);
+        }
+        .back-link { padding: 9px 13px; color: #c8dcff; text-decoration: none; font-size: 0.8rem; }
+        .status-chip { padding: 8px 12px; color: var(--muted); font-size: 0.78rem; }
+        .status-chip.ready { color: var(--green); border-color: rgba(69, 212, 131, .3); background: rgba(69, 212, 131, .08); }
+
+        .layout {
+            display: grid;
+            grid-template-columns: 270px minmax(0, 1fr) 310px;
+            gap: 18px;
+            padding: 22px;
+            min-height: calc(100vh - 86px);
+        }
+        .panel { border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); box-shadow: 0 18px 50px rgba(0,0,0,.2); }
+        .sidebar, .results { padding: 20px; }
+        .panel-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+        .panel-title h2 { font-size: 1rem; }
+        .panel-title span { color: var(--muted); font-size: .72rem; }
+
+        .dropzone { padding: 20px 14px; text-align: center; border: 1px dashed rgba(96,165,250,.5); border-radius: 13px; background: rgba(37,99,235,.08); }
+        .dropzone strong { display: block; font-size: .9rem; }
+        .dropzone p { margin-top: 7px; color: var(--muted); font-size: .74rem; line-height: 1.5; }
+        .file-name { display: none; margin-top: 10px; color: var(--green); font-size: .75rem; word-break: break-all; }
+        input[type=file] { display: none; }
+        .field { margin-top: 18px; }
+        label { display: block; margin-bottom: 7px; color: var(--muted); font-size: .75rem; }
+        select { width: 100%; padding: 10px; color: var(--text); border: 1px solid var(--border); border-radius: 9px; background: #121a2a; }
+        .primary-btn, .ghost-btn { width: 100%; padding: 11px 14px; font-size: .8rem; font-weight: 600; }
+        .primary-btn { margin-top: 22px; border-color: rgba(96,165,250,.6); background: #2563b9; }
+        .primary-btn:hover { background: #3478d1; }
+        .primary-btn:disabled { cursor: not-allowed; opacity: .55; }
+        .ghost-btn { margin-top: 10px; color: var(--muted); }
+        .checks { display: grid; gap: 10px; margin-top: 22px; }
+        .checks label { display: flex; align-items: center; gap: 9px; margin: 0; color: #c8d0dc; }
+        .checks input { accent-color: var(--blue); }
+
+        .workspace { display: grid; grid-template-rows: auto minmax(255px, 1fr) auto; gap: 14px; min-width: 0; }
+        .overview { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+        .metric { padding: 16px; border: 1px solid var(--border); border-radius: 14px; background: var(--panel); }
+        .metric span { color: var(--muted); font-size: .72rem; }
+        .metric strong { display: block; margin-top: 7px; font-size: 1.35rem; }
+        .signal-panel { min-height: 0; padding: 18px; overflow: hidden; }
+        .signal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+        .signal-head h2 { font-size: 1rem; }
+        .signal-head span { color: var(--muted); font-size: .73rem; }
+        .signal-canvas { position: relative; height: calc(100% - 38px); min-height: 210px; overflow: hidden; border: 1px solid rgba(148,163,184,.14); border-radius: 12px; background: #0d1422; }
+        .signal-canvas::before { content: ""; position: absolute; inset: 0; background-image: linear-gradient(rgba(148,163,184,.08) 1px, transparent 1px), linear-gradient(90deg, rgba(148,163,184,.08) 1px, transparent 1px); background-size: 25% 25%; }
+        .wave { position: absolute; left: 0; width: 100%; height: 2px; opacity: .88; background: linear-gradient(90deg, transparent, var(--blue), #8bdbff, transparent); transform: skewY(-5deg); animation: drift 3.2s ease-in-out infinite alternate; }
+        .wave:nth-child(1) { top: 27%; }
+        .wave:nth-child(2) { top: 45%; animation-delay: -.8s; background: linear-gradient(90deg, transparent, var(--green), #b7ffd5, transparent); }
+        .wave:nth-child(3) { top: 64%; animation-delay: -1.5s; background: linear-gradient(90deg, transparent, var(--orange), #ffe3a4, transparent); }
+        @keyframes drift { from { transform: translateX(-5%) skewY(-5deg); opacity: .45; } to { transform: translateX(5%) skewY(4deg); opacity: .95; } }
+        .signal-labels { position: absolute; inset: 12px; display: flex; flex-direction: column; justify-content: space-between; color: var(--muted); font-size: .68rem; pointer-events: none; }
+
+        .progress-panel { padding: 15px 18px; }
+        .progress-row { display: flex; justify-content: space-between; color: var(--muted); font-size: .75rem; }
+        .progress-track { height: 8px; margin-top: 10px; overflow: hidden; border-radius: 999px; background: rgba(148,163,184,.14); }
+        .progress-fill { width: 0; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--blue), var(--green)); transition: width .35s ease; }
+
+        .score-card { padding: 18px; border: 1px solid rgba(69,212,131,.25); border-radius: 14px; background: rgba(69,212,131,.06); }
+        .score-card .score { margin-top: 6px; font-size: 2.5rem; font-weight: 700; color: var(--green); }
+        .score-card .score small { font-size: .8rem; color: var(--muted); font-weight: 400; }
+        .score-card p { margin-top: 5px; color: var(--muted); font-size: .73rem; }
+        .result-list { display: grid; gap: 12px; margin-top: 18px; }
+        .result-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-bottom: 12px; border-bottom: 1px solid rgba(148,163,184,.12); }
+        .result-item span { color: var(--muted); font-size: .76rem; }
+        .result-item strong { font-size: .82rem; }
+        .good { color: var(--green); } .warn { color: var(--orange); } .bad { color: var(--red); }
+        .legend { display: flex; flex-wrap: wrap; gap: 9px 14px; margin-top: 18px; color: var(--muted); font-size: .7rem; }
+        .legend i { display: inline-block; width: 7px; height: 7px; margin-right: 5px; border-radius: 50%; background: var(--blue); }
+        .legend .green i { background: var(--green); } .legend .orange i { background: var(--orange); }
+
+        @media (max-width: 1100px) { .layout { grid-template-columns: 230px minmax(0, 1fr); } .results { grid-column: 1 / -1; } }
+        @media (max-width: 760px) { .topbar { align-items: flex-start; flex-direction: column; } .top-actions { width: 100%; justify-content: space-between; } .layout { display: block; padding: 14px; } .sidebar, .workspace, .results { margin-bottom: 14px; } .overview { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+    <header class="topbar">
+        <div>
+            <div class="eyebrow">OpenBCI / OFFLINE ANALYSIS</div>
+            <h1>离线全局检测</h1>
+            <p class="subtitle">导入历史脑电文件，集中查看信号质量、疲劳风险与异常通道</p>
+        </div>
+        <div class="top-actions">
+            <span id="status-chip" class="status-chip">等待文件</span>
+            <a class="back-link" href="/">返回实时监测</a>
+        </div>
+    </header>
+
+    <main class="layout">
+        <aside class="panel sidebar">
+            <div class="panel-title"><h2>检测任务</h2><span>STEP 01</span></div>
+            <label class="dropzone" for="file-input">
+                <strong>选择脑电文件</strong>
+                <p>支持 CSV / EDF / BDF<br>点击此处导入离线数据</p>
+                <span id="file-name" class="file-name"></span>
+            </label>
+            <input id="file-input" type="file" accept=".csv,.edf,.bdf">
+            <div class="field"><label for="profile">检测方案</label><select id="profile"><option>全局快速筛查</option><option>疲劳风险评估</option><option>信号质量审查</option></select></div>
+            <div class="field"><label for="window">分析窗口</label><select id="window"><option>4 秒 · 步长 1 秒</option><option>8 秒 · 步长 2 秒</option><option>15 秒 · 步长 5 秒</option></select></div>
+            <div class="checks">
+                <label><input type="checkbox" checked> 自动剔除明显伪迹</label>
+                <label><input type="checkbox" checked> 计算 Alpha / Beta 指标</label>
+                <label><input type="checkbox"> 纳入 EOG 事件分析</label>
+            </div>
+            <button id="run-btn" class="primary-btn" disabled>开始离线检测</button>
+            <button id="reset-btn" class="ghost-btn" type="button">清空任务</button>
+        </aside>
+
+        <section class="workspace">
+            <div class="overview">
+                <div class="metric"><span>文件时长</span><strong id="duration">--</strong></div>
+                <div class="metric"><span>有效片段</span><strong id="segments">--</strong></div>
+                <div class="metric"><span>信号质量</span><strong id="quality">待检测</strong></div>
+            </div>
+            <section class="panel signal-panel">
+                <div class="signal-head"><h2>全局信号概览</h2><span id="signal-caption">导入文件后显示分析波形</span></div>
+                <div class="signal-canvas">
+                    <div class="signal-labels"><span>通道 01 · Alpha</span><span>通道 08 · 参考</span><span>通道 16 · EOG</span></div>
+                    <div class="wave"></div><div class="wave"></div><div class="wave"></div>
+                </div>
+            </section>
+            <section class="panel progress-panel">
+                <div class="progress-row"><span id="progress-label">等待开始</span><span id="progress-value">0%</span></div>
+                <div class="progress-track"><div id="progress-fill" class="progress-fill"></div></div>
+            </section>
+        </section>
+
+        <aside class="panel results">
+            <div class="panel-title"><h2>检测结果</h2><span>STEP 02</span></div>
+            <div class="score-card"><span class="eyebrow">综合状态</span><div class="score" id="score">--<small>/ 100</small></div><p id="score-note">完成检测后生成综合评分</p></div>
+            <div class="result-list">
+                <div class="result-item"><span>疲劳风险</span><strong id="fatigue-result">待检测</strong></div>
+                <div class="result-item"><span>异常通道</span><strong id="channel-result">待检测</strong></div>
+                <div class="result-item"><span>伪迹占比</span><strong id="artifact-result">待检测</strong></div>
+                <div class="result-item"><span>Alpha 衰减</span><strong id="alpha-result">待检测</strong></div>
+            </div>
+            <div class="legend"><span><i></i>正常</span><span class="green"><i></i>良好</span><span class="orange"><i></i>需关注</span></div>
+        </aside>
+    </main>
+
+    <script>
+        const fileInput = document.getElementById('file-input');
+        const fileName = document.getElementById('file-name');
+        const runButton = document.getElementById('run-btn');
+        const statusChip = document.getElementById('status-chip');
+        const progressFill = document.getElementById('progress-fill');
+        const progressValue = document.getElementById('progress-value');
+        const progressLabel = document.getElementById('progress-label');
+        const result = { score: document.getElementById('score'), note: document.getElementById('score-note'), fatigue: document.getElementById('fatigue-result'), channel: document.getElementById('channel-result'), artifact: document.getElementById('artifact-result'), alpha: document.getElementById('alpha-result') };
+
+        fileInput.addEventListener('change', () => {
+            const file = fileInput.files[0];
+            if (!file) return;
+            fileName.textContent = `已选择：${file.name}`;
+            fileName.style.display = 'block';
+            runButton.disabled = false;
+            statusChip.textContent = '文件已就绪';
+            statusChip.classList.add('ready');
+            document.getElementById('duration').textContent = '12:48';
+            document.getElementById('segments').textContent = '—';
+            document.getElementById('quality').textContent = '待检测';
+            document.getElementById('signal-caption').textContent = `${file.name} · 等待分析`;
+        });
+
+        async function pollJob(jobId) {
+            const response = await fetch(`/api/offline/jobs/${jobId}`);
+            if (!response.ok) throw new Error('无法读取离线任务状态');
+            const job = await response.json();
+            progressFill.style.width = `${job.progress}%`;
+            progressValue.textContent = `${job.progress}%`;
+            progressLabel.textContent = job.message || '正在分析';
+            if (job.status === 'queued' || job.status === 'running') {
+                window.setTimeout(() => pollJob(jobId).catch(showError), 500);
+                return;
+            }
+            if (job.status === 'failed') throw new Error(job.error || '离线检测失败');
+            const data = job.result;
+            statusChip.textContent = '检测完成';
+            statusChip.classList.add('ready');
+            document.getElementById('duration').textContent = `${data.duration_seconds}s`;
+            document.getElementById('segments').textContent = data.valid_segments;
+            document.getElementById('quality').textContent = data.quality;
+            document.getElementById('quality').className = data.score >= 75 ? 'good' : 'warn';
+            result.score.innerHTML = `${Math.round(data.score)}<small>/ 100</small>`;
+            result.note.textContent = `${data.label} · 模型：rule-based-baseline`;
+            result.fatigue.textContent = data.score >= 75 ? '低风险' : '需关注';
+            result.fatigue.className = data.score >= 75 ? 'good' : 'warn';
+            result.channel.textContent = '待模型细分';
+            result.artifact.textContent = `${(data.metrics.artifact_ratio * 100).toFixed(1)}%`;
+            result.artifact.className = data.metrics.artifact_ratio < 0.05 ? 'good' : 'warn';
+            result.alpha.textContent = '待模型细分';
+            runButton.disabled = false;
+        }
+
+        function showError(error) {
+            statusChip.textContent = '检测失败';
+            statusChip.classList.remove('ready');
+            progressLabel.textContent = error.message || '检测失败';
+            runButton.disabled = false;
+        }
+
+        runButton.addEventListener('click', async () => {
+            const file = fileInput.files[0];
+            if (!file) return;
+            runButton.disabled = true;
+            statusChip.textContent = '上传中';
+            statusChip.classList.remove('ready');
+            progressFill.style.width = '3%';
+            progressValue.textContent = '3%';
+            progressLabel.textContent = '正在上传文件';
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+                const profile = encodeURIComponent(document.getElementById('profile').value);
+                const windowValue = encodeURIComponent(document.getElementById('window').value);
+                const response = await fetch(`/api/offline/jobs?profile=${profile}&window=${windowValue}`, { method: 'POST', body: formData });
+                if (!response.ok) {
+                    const detail = await response.json().catch(() => ({}));
+                    throw new Error(detail.detail || '文件上传失败');
+                }
+                const job = await response.json();
+                statusChip.textContent = '检测中';
+                await pollJob(job.job_id);
+            } catch (error) {
+                showError(error);
+            }
+        });
+
+        document.getElementById('reset-btn').addEventListener('click', () => window.location.reload());
+    </script>
+</body>
+</html>
