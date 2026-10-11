@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OpenBCI EEG Dashboard + Wheelchair Control</title>
+    <title>OpenBCI 脑电仪表盘与轮椅控制</title>
     <style>
         :root {
             --glass-bg: rgba(28, 28, 30, 0.65);
@@ -824,17 +824,17 @@
 <body>
     <header class="header">
         <div>
-            <h1>OpenBCI EEG Dashboard</h1>
-            <div class="subtitle">Cyton + Daisy | 16 Channels | Wheelchair Control</div>
+            <h1>OpenBCI 脑电仪表盘</h1>
+            <div class="subtitle">Cyton + Daisy | 16 通道 | 轮椅控制</div>
         </div>
         <div class="status-badges">
             <div id="status-badge" class="status-badge disconnected">
                 <span class="status-dot"></span>
-                <span id="status-text">Disconnected</span>
+                <span id="status-text">未连接</span>
             </div>
             <div id="wheelchair-badge" class="status-badge disconnected" style="display: none;">
                 <span class="status-dot"></span>
-                <span id="wheelchair-status-text">Wheelchair Off</span>
+                <span id="wheelchair-status-text">轮椅控制已关闭</span>
             </div>
         </div>
     </header>
@@ -843,46 +843,46 @@
         <!-- Left Panel: Connection & Stats -->
         <aside class="control-panel">
             <div class="control-section">
-                <h3>Connection</h3>
+                <h3>设备连接</h3>
                 <select id="port-select" class="port-select">
-                    <option value="">Select serial port...</option>
+                    <option value="">请选择串口...</option>
                 </select>
-                <input type="text" id="port-input" class="port-input" placeholder="Or enter port manually...">
-                <button id="refresh-ports" class="btn btn-secondary btn-small">Refresh Ports</button>
-                <button id="connect-btn" class="btn btn-primary">Connect</button>
-                <button id="disconnect-btn" class="btn btn-danger" disabled>Disconnect</button>
+                <input type="text" id="port-input" class="port-input" placeholder="或手动输入串口...">
+                <button id="refresh-ports" class="btn btn-secondary btn-small">刷新串口</button>
+                <button id="connect-btn" class="btn btn-primary">连接</button>
+                <button id="disconnect-btn" class="btn btn-danger" disabled>断开连接</button>
             </div>
 
             <div class="control-section">
-                <h3>Streaming</h3>
-                <button id="start-btn" class="btn btn-success" disabled>Start Streaming</button>
-                <button id="stop-btn" class="btn btn-danger" disabled>Stop Streaming</button>
+                <h3>数据采集</h3>
+                <button id="start-btn" class="btn btn-success" disabled>开始采集</button>
+                <button id="stop-btn" class="btn btn-danger" disabled>停止采集</button>
             </div>
 
             <div class="control-section">
-                <h3>Statistics</h3>
+                <h3>统计信息</h3>
                 <div class="stats-grid">
                     <div class="stat-card">
                         <div class="stat-value" id="stat-channels">--</div>
-                        <div class="stat-label">Channels</div>
+                        <div class="stat-label">通道数</div>
                     </div>
                     <div class="stat-card">
                         <div class="stat-value" id="stat-rate">--</div>
-                        <div class="stat-label">Sample Rate</div>
+                        <div class="stat-label">采样率</div>
                     </div>
                     <div class="stat-card">
                         <div class="stat-value" id="stat-samples">0</div>
-                        <div class="stat-label">Samples</div>
+                        <div class="stat-label">样本数</div>
                     </div>
                     <div class="stat-card">
                         <div class="stat-value" id="stat-dropped">0</div>
-                        <div class="stat-label">Dropped</div>
+                        <div class="stat-label">丢包数</div>
                     </div>
                 </div>
             </div>
 
             <div class="control-section">
-                <h3>Log</h3>
+                <h3>运行日志</h3>
                 <div id="log-panel" class="log-panel"></div>
             </div>
         </aside>
@@ -890,38 +890,38 @@
         <!-- Center: EEG Chart -->
         <main class="chart-container">
             <div class="chart-header">
-                <h2>Time Series - EEG Channels</h2>
+                <h2>脑电通道时序波形</h2>
                 <div class="chart-controls">
-                    <label>Gain</label>
+                    <label>增益</label>
                     <select id="gain-select">
-                        <option value="1" selected>1x (Raw)</option>
+                        <option value="1" selected>1x（原始信号）</option>
                         <option value="0.1">0.1x</option>
                         <option value="0.01">0.01x</option>
                         <option value="0.001">0.001x</option>
                         <option value="0.0001">0.0001x</option>
                     </select>
-                    <label>Scale</label>
+                    <label>量程</label>
                     <select id="vert-scale">
                         <option value="50">50 uV</option>
-                        <option value="100">100 uV</option>
+                        <option value="100" selected>100 uV</option>
                         <option value="200">200 uV</option>
                         <option value="500">500 uV</option>
                         <option value="1000">1 mV</option>
                         <option value="5000">5 mV</option>
                         <option value="10000">10 mV</option>
                         <option value="50000">50 mV</option>
-                        <option value="100000" selected>100 mV</option>
+                        <option value="100000">100 mV</option>
                         <option value="200000">200 mV</option>
                         <option value="500000">500 mV</option>
                         <option value="1000000">1 V</option>
                     </select>
-                    <label>Window</label>
+                    <label>时间窗口</label>
                     <select id="time-window-select">
-                        <option value="2">2 sec</option>
-                        <option value="5" selected>5 sec</option>
-                        <option value="10">10 sec</option>
+                        <option value="2">2 秒</option>
+                        <option value="5" selected>5 秒</option>
+                        <option value="10">10 秒</option>
                     </select>
-                    <button id="clear-btn" class="btn btn-secondary btn-small">Clear</button>
+                    <button id="clear-btn" class="btn btn-secondary btn-small">清空</button>
                 </div>
             </div>
             <div class="eeg-display">
@@ -943,10 +943,10 @@
             <!-- Camera Feed Section -->
             <div id="camera-feed-section" class="camera-feed-section" style="display: none;">
                 <div class="camera-feed-header">
-                    <h3>Camera Feed</h3>
+                    <h3>摄像头画面</h3>
                     <div id="vision-status-inline" class="vision-status-inline">
                         <span class="vision-icon-inline" id="vision-icon-inline">--</span>
-                        <span class="vision-text-inline" id="vision-text-inline">Waiting...</span>
+                        <span class="vision-text-inline" id="vision-text-inline">等待中...</span>
                     </div>
                 </div>
                 <div class="camera-feed-content">
@@ -959,48 +959,48 @@
         <!-- Right Panel: Wheelchair Control -->
         <aside class="wheelchair-panel">
             <div class="control-section">
-                <h3>Movement Status</h3>
+                <h3>运动状态</h3>
                 <div class="movement-status" id="movement-status">
-                    <div class="movement-action" id="movement-action">IDLE</div>
-                    <div class="movement-detail" id="movement-detail">Waiting for command...</div>
+                    <div class="movement-action" id="movement-action">空闲</div>
+                    <div class="movement-detail" id="movement-detail">等待控制指令...</div>
                 </div>
             </div>
 
             <div class="control-section">
-                <h3>Arduino Motor Control</h3>
+                <h3>Arduino 电机控制</h3>
                 <select id="arduino-port-select" class="port-select" style="margin-bottom: 0.5rem;">
-                    <option value="">Select Arduino port...</option>
+                    <option value="">请选择 Arduino 串口...</option>
                 </select>
-                <button id="arduino-refresh-btn" class="btn btn-secondary btn-small" style="margin-bottom: 0.5rem;">Refresh Ports</button>
+                <button id="arduino-refresh-btn" class="btn btn-secondary btn-small" style="margin-bottom: 0.5rem;">刷新串口</button>
                 <div style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem;">
-                    <button id="arduino-connect-btn" class="btn btn-primary" style="flex: 1;">Connect</button>
-                    <button id="arduino-disconnect-btn" class="btn btn-danger" style="flex: 1;" disabled>Disconnect</button>
+                    <button id="arduino-connect-btn" class="btn btn-primary" style="flex: 1;">连接</button>
+                    <button id="arduino-disconnect-btn" class="btn btn-danger" style="flex: 1;" disabled>断开</button>
                 </div>
                 <div id="arduino-status" class="vision-status" style="margin-bottom: 0.5rem;">
                     <div class="vision-indicator" id="arduino-indicator">
                         <span class="vision-icon" id="arduino-icon">⚪</span>
-                        <span id="arduino-status-text">Disconnected</span>
+                        <span id="arduino-status-text">未连接</span>
                     </div>
                 </div>
                 <div class="control-section" style="margin-bottom: 0;">
-                    <label style="font-size: 0.7rem; color: #666;">Manual Test Controls:</label>
+                    <label style="font-size: 0.7rem; color: #666;">手动测试控制：</label>
                     <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.25rem; margin-top: 0.25rem;">
                         <div></div>
-                        <button class="btn btn-success btn-small arduino-test" data-cmd="forward">▲ FWD</button>
+                        <button class="btn btn-success btn-small arduino-test" data-cmd="forward">▲ 前进</button>
                         <div></div>
-                        <button class="btn btn-secondary btn-small arduino-test" data-cmd="left">◄ LEFT</button>
-                        <button class="btn btn-danger btn-small arduino-test" data-cmd="stop">■ STOP</button>
-                        <button class="btn btn-warning btn-small arduino-test" data-cmd="right">► RIGHT</button>
+                        <button class="btn btn-secondary btn-small arduino-test" data-cmd="left">◄ 左转</button>
+                        <button class="btn btn-danger btn-small arduino-test" data-cmd="stop">■ 停止</button>
+                        <button class="btn btn-warning btn-small arduino-test" data-cmd="right">► 右转</button>
                         <div></div>
-                        <button class="btn btn-secondary btn-small arduino-test" data-cmd="backward">▼ BACK</button>
+                        <button class="btn btn-secondary btn-small arduino-test" data-cmd="backward">▼ 后退</button>
                         <div></div>
                     </div>
                 </div>
             </div>
 
             <div class="control-section">
-                <h3>Overshoot Vision</h3>
-                <input type="text" id="overshoot-api-key" class="port-input" placeholder="Overshoot API Key..." style="margin-bottom: 0.5rem;">
+                <h3>Overshoot 视觉避障</h3>
+                <input type="text" id="overshoot-api-key" class="port-input" placeholder="请输入 Overshoot API 密钥..." style="margin-bottom: 0.5rem;">
                 <label class="toggle-switch" id="vision-switch">
                     <input type="checkbox" id="vision-toggle">
                     <span class="slider" style="font-size: 0.7rem;"></span>
@@ -1008,18 +1008,18 @@
             </div>
 
             <div class="control-section">
-                <h3>Wheelchair Control</h3>
+                <h3>轮椅控制</h3>
                 <label class="toggle-switch">
                     <input type="checkbox" id="wheelchair-toggle">
                     <span class="slider"></span>
                 </label>
-                <button id="calibrate-btn" class="btn btn-warning" disabled>Calibrate (10s)</button>
+                <button id="calibrate-btn" class="btn btn-warning" disabled>校准（10 秒）</button>
                 <div id="calibration-status" style="display: none;">
                     <div class="calibration-instruction" id="calibration-instruction">
-                        Sit still, look straight ahead, relax.
+                        请保持静止、直视前方并放松。
                     </div>
                     <div class="slider-label" style="margin-top: 0.5rem;">
-                        <span>Recording baseline...</span>
+                        <span>正在记录基线...</span>
                         <span id="calibration-percent">0%</span>
                     </div>
                     <div class="calibration-bar">
@@ -1030,10 +1030,10 @@
             </div>
 
             <div class="control-section">
-                <h3>Detected Command</h3>
+                <h3>检测到的指令</h3>
                 <div class="command-display" id="command-display">
                     <div class="command-icon" id="command-icon">--</div>
-                    <div class="command-text" id="command-text">WAITING</div>
+                    <div class="command-text" id="command-text">等待中</div>
                     <div class="command-confidence" id="command-confidence">--</div>
                     <div class="cooldown-bar">
                         <div class="cooldown-progress" id="cooldown-bar" style="width: 0%"></div>
@@ -1042,7 +1042,7 @@
             </div>
 
             <div class="control-section">
-                <h3>Signal Features</h3>
+                <h3>信号特征</h3>
                 <div class="feature-display">
                     <div class="feature-card" id="fp1-card">
                         <div class="feature-value" id="feature-fp1">--</div>
@@ -1054,43 +1054,43 @@
                     </div>
                     <div class="feature-card">
                         <div class="feature-value" id="feature-jaw">--</div>
-                        <div class="feature-label">Jaw Power</div>
+                        <div class="feature-label">咬牙能量</div>
                     </div>
                     <div class="feature-card">
                         <div class="feature-value" id="feature-quality">--</div>
-                        <div class="feature-label">Quality</div>
+                        <div class="feature-label">信号质量</div>
                     </div>
                 </div>
             </div>
 
             <div class="control-section">
-                <h3>Command Stats</h3>
+                <h3>指令统计</h3>
                 <div class="stats-grid">
                     <div class="stat-card">
                         <div class="stat-value" id="stat-commands">0</div>
-                        <div class="stat-label">Total Cmds</div>
+                        <div class="stat-label">指令总数</div>
                     </div>
                     <div class="stat-card">
                         <div class="stat-value" id="stat-last-cmd">--</div>
-                        <div class="stat-label">Last Cmd</div>
+                        <div class="stat-label">最近指令</div>
                     </div>
                 </div>
             </div>
 
             <div class="control-section">
-                <h3>Delta Log (Ch1 / Ch3)</h3>
+                <h3>变化量日志（通道 1 / 通道 3）</h3>
                 <div class="delta-log" id="delta-log">
                     <div style="color: #666; font-size: 0.8rem; text-align: center; padding: 0.5rem;">
-                        Waiting for data...
+                        等待数据...
                     </div>
                 </div>
             </div>
 
             <div class="control-section">
-                <h3>Command History</h3>
+                <h3>指令历史</h3>
                 <div class="command-history" id="command-history">
                     <div style="color: #666; font-size: 0.8rem; text-align: center; padding: 1rem;">
-                        No commands yet
+                        暂无指令
                     </div>
                 </div>
             </div>
@@ -1119,8 +1119,10 @@
         const CONFIG = {
             wsUrl: `ws://${window.location.host}/ws`,
             numChannels: 16,
+            sampleRate: 125,
+            channelLabels: ['Fp1', 'Fp2', 'F4', 'Fz', 'F3', 'T7', 'C3', 'Cz', 'C4', 'T8', 'P4', 'Pz', 'P3', 'O1', 'Oz', 'O2'],
             timeWindowSeconds: 5,
-            vertScale: 100000,  // Scale for display (+/- this value in uV)
+            vertScale: 100,     // EEG display scale in uV (+/- this value)
             gain: 1,            // Gain multiplier for display (1 = raw values)
             channelColors: [
                 '#ff6b6b', '#ffa502', '#ffd43b', '#69db7c',
@@ -1139,6 +1141,36 @@
             }
         };
 
+        const COMMAND_LABELS = {
+            forward: '前进',
+            backward: '后退',
+            left: '左转',
+            right: '右转',
+            stop: '停止',
+            blocked: '已阻止',
+            both: '双通道触发',
+            idle: '空闲'
+        };
+
+        function commandLabel(command) {
+            return COMMAND_LABELS[command] || command || '--';
+        }
+
+        function translateServerText(text) {
+            if (!text) return text;
+            return String(text)
+                .replace('Sit still, look straight ahead, relax. Avoid blinking.', '请保持静止、直视前方并放松，尽量不要眨眼。')
+                .replace('Calibration complete!', '校准完成！')
+                .replace('Calibration failed - no data', '校准失败：未采集到数据')
+                .replace('Calibration started', '校准已开始')
+                .replace('Recording baseline for 10 seconds...', '正在记录 10 秒基线数据...')
+                .replace('Blink:', '眨眼阈值：')
+                .replace('Jaw:', '咬牙阈值：')
+                .replace('Eye move:', '眼动阈值：')
+                .replace('baseline +', '基线 +')
+                .replace('Error:', '错误：');
+        }
+
         // =====================================================================
         // State
         // =====================================================================
@@ -1152,7 +1184,34 @@
 
         let dataBuffers = [];
         let timeBuffer = [];
-        const maxBufferSize = 125 * 30;
+        let maxBufferSize = CONFIG.sampleRate * CONFIG.timeWindowSeconds;
+
+        function trimDisplayWindow() {
+            maxBufferSize = Math.max(1, Math.ceil(CONFIG.sampleRate * CONFIG.timeWindowSeconds));
+            dataBuffers.forEach(buffer => {
+                if (buffer.length > maxBufferSize) {
+                    buffer.splice(0, buffer.length - maxBufferSize);
+                }
+            });
+            if (timeBuffer.length > maxBufferSize) {
+                timeBuffer.splice(0, timeBuffer.length - maxBufferSize);
+            }
+        }
+
+        function updateSamplingRate(sampleRate) {
+            const parsedRate = Number(sampleRate);
+            if (!Number.isFinite(parsedRate) || parsedRate <= 0) return;
+            CONFIG.sampleRate = parsedRate;
+            trimDisplayWindow();
+        }
+
+        function updateChannelLabels(labels) {
+            if (!Array.isArray(labels) || labels.length === 0) return;
+            const normalized = labels.slice(0, CONFIG.numChannels).map((label, index) => label || `通道${index + 1}`);
+            if (JSON.stringify(normalized) === JSON.stringify(CONFIG.channelLabels)) return;
+            CONFIG.channelLabels = normalized;
+            initChart();
+        }
 
         for (let i = 0; i < CONFIG.numChannels; i++) {
             dataBuffers.push([]);
@@ -1303,7 +1362,7 @@
                 row.className = 'eeg-channel';
                 row.innerHTML = `
                     <div class="channel-label">
-                        <div class="channel-num" style="background: ${CONFIG.channelColors[i]}">${i + 1}</div>
+                        <div class="channel-num" style="background: ${CONFIG.channelColors[i]}">${CONFIG.channelLabels[i] || i + 1}</div>
                     </div>
                     <div class="channel-scale">
                         <span>+${CONFIG.vertScale}uV</span>
@@ -1313,7 +1372,7 @@
                         <canvas id="canvas-ch${i}"></canvas>
                     </div>
                     <div class="channel-status" id="status-ch${i}">
-                        <span class="not-railed">Not Railed 0%</span>
+                        <span class="not-railed">未超量程 0%</span>
                         <span class="rms">0.00 uVrms</span>
                     </div>
                 `;
@@ -1376,25 +1435,30 @@
             ctx.stroke();
 
             // Calculate samples to show based on time window
-            const samplesPerSecond = 125;
+            const samplesPerSecond = CONFIG.sampleRate;
             const samplesToShow = CONFIG.timeWindowSeconds * samplesPerSecond;
             const startIdx = Math.max(0, data.length - samplesToShow);
             const visibleData = data.slice(startIdx);
 
             if (visibleData.length < 2) return;
 
+            // Remove the DC offset for visualization only. The received LSL
+            // samples remain unchanged in the backend and data buffer.
+            const baseline = visibleData.reduce((sum, value) => sum + value, 0) / visibleData.length;
+            const centeredData = visibleData.map(value => value - baseline);
+
             // Calculate stats
             let railedCount = 0;
             let sumSquares = 0;
             const railThreshold = CONFIG.vertScale * 0.95;
 
-            for (const val of visibleData) {
+            for (const val of centeredData) {
                 if (Math.abs(val) > railThreshold) railedCount++;
                 sumSquares += val * val;
             }
 
-            const railedPercent = (railedCount / visibleData.length) * 100;
-            const rms = Math.sqrt(sumSquares / visibleData.length);
+            const railedPercent = (railedCount / centeredData.length) * 100;
+            const rms = Math.sqrt(sumSquares / centeredData.length);
 
             channelStats[channelIndex] = {
                 railedPercent: railedPercent,
@@ -1406,7 +1470,7 @@
             if (statusEl) {
                 const isRailed = railedPercent > 50;
                 statusEl.innerHTML = `
-                    <span class="${isRailed ? 'railed' : 'not-railed'}">${isRailed ? 'Railed' : 'Not Railed'} ${railedPercent.toFixed(2)}%</span>
+                    <span class="${isRailed ? 'railed' : 'not-railed'}">${isRailed ? '超量程' : '未超量程'} ${railedPercent.toFixed(2)}%</span>
                     <span class="rms">${rms.toFixed(2)} uVrms</span>
                 `;
             }
@@ -1419,10 +1483,10 @@
             const xStep = width / samplesToShow;
             const yScale = (height / 2) / CONFIG.vertScale;
 
-            for (let i = 0; i < visibleData.length; i++) {
+            for (let i = 0; i < centeredData.length; i++) {
                 const x = i * xStep;
                 // Clamp value to scale range
-                const clampedVal = Math.max(-CONFIG.vertScale, Math.min(CONFIG.vertScale, visibleData[i]));
+                const clampedVal = Math.max(-CONFIG.vertScale, Math.min(CONFIG.vertScale, centeredData[i]));
                 const y = midY - (clampedVal * yScale);
 
                 if (i === 0) {
@@ -1466,8 +1530,8 @@
             }
             // Reset delta log
             deltaLogInitialized = false;
-            elements.deltaLog.innerHTML = '<div style="color: #666; font-size: 0.8rem; text-align: center; padding: 0.5rem;">Waiting for data...</div>';
-            log('Chart cleared', 'info');
+            elements.deltaLog.innerHTML = '<div style="color: #666; font-size: 0.8rem; text-align: center; padding: 0.5rem;">等待数据...</div>';
+            log('波形图已清空', 'info');
         }
 
         // Handle window resize
@@ -1543,27 +1607,27 @@
             // Play beep if obstacle alert triggered
             if (obstacleAlert) {
                 playObstacleBeep();
-                log('⚠️ OBSTACLE DETECTED - Emergency stop!', 'error');
+                log('⚠️ 检测到障碍物，已紧急停车！', 'error');
             }
 
             // Update movement status (Arduino is controlled by backend now)
             if (blockedByObstacle) {
-                updateMovementStatus('BLOCKED', 'Forward blocked - obstacle detected!');
+                updateMovementStatus('blocked', '检测到障碍物，已阻止前进！');
             } else if (cmd === 'forward') {
-                updateMovementStatus('FORWARD', 'Moving forward');
+                updateMovementStatus('forward', '正在前进');
             } else if (cmd === 'right') {
-                updateMovementStatus('RIGHT', 'Turning right');
+                updateMovementStatus('right', '正在右转');
             } else if (cmd === 'both') {
-                updateMovementStatus('FORWARD', 'Both channels triggered');
+                updateMovementStatus('forward', '双通道已触发');
             } else if (!cmd) {
-                updateMovementStatus('IDLE', 'Waiting for command...');
+                updateMovementStatus('idle', '等待控制指令...');
             }
 
             // Update command display
             elements.commandDisplay.className = 'command-display' + (cmd ? ` active ${cmd}` : '');
             elements.commandIcon.innerHTML = CONFIG.commandIcons[cmd] || '--';
-            elements.commandText.textContent = cmd ? cmd.toUpperCase() : (blockedByObstacle ? 'BLOCKED' : 'WAITING');
-            elements.commandConfidence.textContent = cmd ? `Confidence: ${(confidence * 100).toFixed(0)}%` : '--';
+            elements.commandText.textContent = cmd ? commandLabel(cmd) : (blockedByObstacle ? '已阻止' : '等待中');
+            elements.commandConfidence.textContent = cmd ? `置信度：${(confidence * 100).toFixed(0)}%` : '--';
 
             // Update cooldown bar
             const cooldownPercent = Math.min(100, (cooldown / 1.0) * 100);
@@ -1581,7 +1645,7 @@
             const now = Date.now();
             if (fp1Pct !== undefined && fp2Pct !== undefined && (now - lastDeltaLogTime >= DELTA_LOG_INTERVAL || cmd || blockedByObstacle)) {
                 lastDeltaLogTime = now;
-                addDeltaLog(fp1Pct, fp2Pct, blockedByObstacle ? 'BLOCKED' : cmd);
+                addDeltaLog(fp1Pct, fp2Pct, blockedByObstacle ? '已阻止' : commandLabel(cmd));
             }
 
             // Highlight FP1/FP2 based on spike
@@ -1590,7 +1654,7 @@
 
             // Update stats
             elements.statCommands.textContent = wheelchair.total_commands || 0;
-            elements.statLastCmd.textContent = wheelchair.last_command ? wheelchair.last_command.toUpperCase() : '--';
+            elements.statLastCmd.textContent = wheelchair.last_command ? commandLabel(wheelchair.last_command) : '--';
 
             // Add to history if new command
             if ((cmd || blockedByObstacle) && (commandHistory.length === 0 || commandHistory[0].command !== (cmd || 'blocked') || Date.now() - commandHistory[0].time > 1500)) {
@@ -1599,22 +1663,22 @@
                 if (commandHistory.length > 20) commandHistory.pop();
                 updateCommandHistory();
                 if (blockedByObstacle) {
-                    log(`BLOCKED: Forward prevented - obstacle detected!`, 'error');
+                    log('已阻止前进：检测到障碍物！', 'error');
                 } else {
-                    log(`Command: ${cmd.toUpperCase()} (${(confidence * 100).toFixed(0)}%)`, 'command');
+                    log(`指令：${commandLabel(cmd)}（${(confidence * 100).toFixed(0)}%）`, 'command');
                 }
             }
         }
 
         function updateCommandHistory() {
             if (commandHistory.length === 0) {
-                elements.commandHistoryEl.innerHTML = '<div style="color: #666; font-size: 0.8rem; text-align: center; padding: 1rem;">No commands yet</div>';
+                elements.commandHistoryEl.innerHTML = '<div style="color: #666; font-size: 0.8rem; text-align: center; padding: 1rem;">暂无指令</div>';
                 return;
             }
 
             elements.commandHistoryEl.innerHTML = commandHistory.map(item => `
                 <div class="history-item">
-                    <span class="history-command ${item.command}">${item.command.toUpperCase()}</span>
+                    <span class="history-command ${item.command}">${commandLabel(item.command)}</span>
                     <span class="history-confidence">${(item.confidence * 100).toFixed(0)}%</span>
                 </div>
             `).join('');
@@ -1623,7 +1687,7 @@
         function updateWheelchairUI() {
             elements.wheelchairBadge.style.display = isConnected ? 'flex' : 'none';
             elements.wheelchairBadge.className = 'status-badge ' + (wheelchairEnabled ? 'wheelchair-active' : 'disconnected');
-            elements.wheelchairStatusText.textContent = wheelchairEnabled ? 'Wheelchair Active' : 'Wheelchair Off';
+            elements.wheelchairStatusText.textContent = wheelchairEnabled ? '轮椅控制已启用' : '轮椅控制已关闭';
             elements.wheelchairToggle.checked = wheelchairEnabled;
             elements.calibrateBtn.disabled = !isStreaming;
         }
@@ -1684,15 +1748,15 @@
 
             elements.visionStatusInline.className = 'vision-status-inline ' + (isBlocked ? 'blocked' : 'clear');
             elements.visionIconInline.textContent = isBlocked ? '⛔' : '✓';
-            elements.visionTextInline.textContent = isBlocked ? 'BLOCKED' : 'CLEAR';
-            elements.visionMessageInline.textContent = isBlocked ? 'Obstacle detected ahead' : 'Path is clear';
+            elements.visionTextInline.textContent = isBlocked ? '前方受阻' : '道路畅通';
+            elements.visionMessageInline.textContent = isBlocked ? '检测到前方障碍物' : '前方道路畅通';
 
             console.log('Vision blocked:', isBlocked);
         }
 
         // Update movement status display
         function updateMovementStatus(action, detail) {
-            elements.movementAction.textContent = action;
+            elements.movementAction.textContent = commandLabel(action);
             elements.movementAction.className = 'movement-action ' + action.toLowerCase();
             elements.movementDetail.textContent = detail;
         }
@@ -1701,19 +1765,19 @@
         async function startOvershootVision() {
             const apiKey = elements.overshootApiKey.value.trim();
             if (!apiKey) {
-                log('Please enter Overshoot API key', 'error');
+                log('请输入 Overshoot API 密钥', 'error');
                 elements.visionToggle.checked = false;
                 return;
             }
 
             if (!RealtimeVision) {
-                log('Overshoot SDK not loaded. Check browser console.', 'error');
+                log('Overshoot SDK 未加载，请检查浏览器控制台。', 'error');
                 elements.visionToggle.checked = false;
                 return;
             }
 
             try {
-                log('Initializing Overshoot Vision...', 'info');
+                log('正在初始化 Overshoot 视觉功能...', 'info');
                 console.log('RealtimeVision class:', RealtimeVision);
 
                 // Get video stream first
@@ -1734,27 +1798,27 @@
                     },
                     onError: (error) => {
                         console.error('Overshoot error:', error);
-                        log(`Vision error: ${error}`, 'error');
+                    log(`视觉识别错误：${error}`, 'error');
                     },
                     onStatusChange: (status) => {
                         console.log('Overshoot status:', status);
-                        log(`Vision status: ${status}`, 'info');
+                        log(`视觉识别状态：${status}`, 'info');
                     }
                 });
 
                 // Start the vision if there's a start method
                 if (overshootVision.start) {
                     await overshootVision.start();
-                    log('Overshoot Vision started', 'success');
+                    log('Overshoot 视觉功能已启动', 'success');
                 } else {
-                    log('Overshoot Vision initialized (auto-start)', 'success');
+                    log('Overshoot 视觉功能已初始化并自动启动', 'success');
                 }
 
                 visionEnabled = true;
 
             } catch (error) {
                 console.error('Vision init error:', error);
-                log(`Failed to start vision: ${error.message}`, 'error');
+                log(`视觉功能启动失败：${error.message}`, 'error');
                 elements.visionToggle.checked = false;
                 visionEnabled = false;
             }
@@ -1775,7 +1839,7 @@
 
             elements.cameraFeedSection.style.display = 'none';
             visionEnabled = false;
-            log('Overshoot Vision stopped', 'info');
+            log('Overshoot 视觉功能已停止', 'info');
         }
 
         // =====================================================================
@@ -1783,21 +1847,21 @@
         // =====================================================================
 
         function updateArduinoPortList(ports) {
-            elements.arduinoPortSelect.innerHTML = '<option value="">Select Arduino port...</option>';
+            elements.arduinoPortSelect.innerHTML = '<option value="">请选择 Arduino 串口...</option>';
             ports.forEach(p => {
                 const option = document.createElement('option');
                 option.value = p.port;
                 option.textContent = `${p.port} - ${p.description}`;
                 elements.arduinoPortSelect.appendChild(option);
             });
-            log(`Found ${ports.length} Arduino port(s)`, 'info');
+            log(`发现 ${ports.length} 个 Arduino 串口`, 'info');
         }
 
         function updateArduinoUI() {
             elements.arduinoConnectBtn.disabled = arduinoConnected;
             elements.arduinoDisconnectBtn.disabled = !arduinoConnected;
             elements.arduinoIcon.textContent = arduinoConnected ? '🟢' : '⚪';
-            elements.arduinoStatusText.textContent = arduinoConnected ? 'Connected' : 'Disconnected';
+            elements.arduinoStatusText.textContent = arduinoConnected ? '已连接' : '未连接';
             elements.arduinoIndicator.className = 'vision-indicator ' + (arduinoConnected ? 'clear' : '');
 
             // Enable/disable test buttons
@@ -1822,19 +1886,19 @@
             ws = new WebSocket(CONFIG.wsUrl);
 
             ws.onopen = () => {
-                log('WebSocket connected', 'success');
+                log('WebSocket 已连接', 'success');
                 ws.send(JSON.stringify({ command: 'get_state' }));
                 ws.send(JSON.stringify({ command: 'detect_ports' }));
                 ws.send(JSON.stringify({ command: 'arduino_list_ports' }));
             };
 
             ws.onclose = () => {
-                log('WebSocket disconnected', 'error');
+                log('WebSocket 已断开，正在尝试重连', 'error');
                 updateUIState(false, false);
                 setTimeout(connectWebSocket, 2000);
             };
 
-            ws.onerror = () => log('WebSocket error', 'error');
+            ws.onerror = () => log('WebSocket 连接错误', 'error');
 
             ws.onmessage = (event) => {
                 const msg = JSON.parse(event.data);
@@ -1848,8 +1912,12 @@
                     updateUIState(msg.is_connected, msg.is_streaming);
                     wheelchairEnabled = msg.wheelchair_enabled || false;
                     updateWheelchairUI();
-                    if (msg.sampling_rate) elements.statRate.textContent = `${msg.sampling_rate} Hz`;
+                    if (msg.sampling_rate) {
+                        updateSamplingRate(msg.sampling_rate);
+                        elements.statRate.textContent = `${msg.sampling_rate} Hz`;
+                    }
                     if (msg.num_channels) elements.statChannels.textContent = msg.num_channels;
+                    if (msg.channel_labels) updateChannelLabels(msg.channel_labels);
                     if (msg.ports) updatePortList(msg.ports);
                     // Handle Arduino status
                     if (msg.arduino) {
@@ -1864,26 +1932,27 @@
 
                 case 'connect_result':
                     if (msg.success) {
-                        log(`Connected to ${elements.portInput.value || elements.portSelect.value}`, 'success');
+                        log(`已连接到 ${elements.portInput.value || elements.portSelect.value}`, 'success');
                         elements.statChannels.textContent = msg.num_channels;
+                        updateSamplingRate(msg.sampling_rate);
                         elements.statRate.textContent = `${msg.sampling_rate} Hz`;
-                        if (msg.has_calibration) log('Calibration loaded', 'info');
+                        if (msg.has_calibration) log('已加载校准数据', 'info');
                         updateUIState(true, false);
                     } else {
-                        log(`Connection failed: ${msg.error}`, 'error');
+                        log(`连接失败：${translateServerText(msg.error)}`, 'error');
                     }
                     break;
 
                 case 'disconnect_result':
                     if (msg.success) {
-                        log('Disconnected', 'info');
+                        log('设备连接已断开', 'info');
                         updateUIState(false, false);
                     }
                     break;
 
                 case 'start_result':
                     if (msg.success) {
-                        log('Streaming started', 'success');
+                        log('数据采集已开始', 'success');
                         updateUIState(true, true);
                         clearChart();
                         commandHistory = [];
@@ -1898,7 +1967,7 @@
 
                 case 'stop_result':
                     if (msg.success) {
-                        log(`Streaming stopped. Samples: ${msg.total_samples}`, 'info');
+                        log(`数据采集已停止，共采集 ${msg.total_samples} 个样本`, 'info');
                         updateUIState(true, false);
                     }
                     break;
@@ -1913,13 +1982,13 @@
                 case 'wheelchair_status':
                     wheelchairEnabled = msg.enabled;
                     updateWheelchairUI();
-                    log(`Wheelchair ${msg.enabled ? 'enabled' : 'disabled'}`, msg.enabled ? 'success' : 'info');
+                    log(`轮椅控制已${msg.enabled ? '启用' : '关闭'}`, msg.enabled ? 'success' : 'info');
                     break;
 
                 case 'calibration_started':
                     elements.calibrationStatus.style.display = 'block';
                     elements.calibrateBtn.disabled = true;
-                    log('Calibration started...', 'info');
+                    log('校准已开始...', 'info');
                     break;
 
                 case 'calibration_progress':
@@ -1929,13 +1998,13 @@
 
                     // Update instruction
                     if (msg.instruction) {
-                        elements.calibrationInstruction.textContent = msg.instruction;
+                        elements.calibrationInstruction.textContent = translateServerText(msg.instruction);
                     }
 
                     // Update calibration logs
                     if (msg.logs && msg.logs.length > 0) {
                         elements.calibrationLogs.innerHTML = msg.logs.map(entry =>
-                            `<div class="calibration-log-entry ${entry.type}">${entry.message}</div>`
+                            `<div class="calibration-log-entry ${entry.type}">${translateServerText(entry.message)}</div>`
                         ).join('');
                         elements.calibrationLogs.scrollTop = elements.calibrationLogs.scrollHeight;
                     }
@@ -1949,13 +2018,13 @@
                         elements.calibrateBtn.disabled = false;
 
                         if (msg.phase === 'complete' || (msg.result && msg.result.success)) {
-                            log('Calibration complete!', 'success');
+                            log('校准完成！', 'success');
                             if (msg.result && msg.result.thresholds) {
-                                log(`Thresholds: blink=${msg.result.thresholds.blink_threshold?.toFixed(1)}, jaw=${msg.result.thresholds.jaw_threshold?.toFixed(0)}, eye=${msg.result.thresholds.eye_move_threshold?.toFixed(1)}`, 'info');
+                                log(`阈值：眨眼=${msg.result.thresholds.blink_threshold?.toFixed(1)}，咬牙=${msg.result.thresholds.jaw_threshold?.toFixed(0)}，眼动=${msg.result.thresholds.eye_move_threshold?.toFixed(1)}`, 'info');
                             }
-                            log('Edit detection_multipliers.json to tune sensitivity', 'info');
+                            log('可编辑 detection_multipliers.json 调整检测灵敏度', 'info');
                         } else if (msg.phase === 'failed') {
-                            log(`Calibration failed: ${msg.result?.error || 'Unknown error'}`, 'error');
+                            log(`校准失败：${translateServerText(msg.result?.error || '未知错误')}`, 'error');
                         }
                     }
                     break;
@@ -1969,18 +2038,18 @@
                     arduinoConnected = msg.connected || false;
                     updateArduinoUI();
                     if (msg.success) {
-                        log(arduinoConnected ? `Arduino connected to ${msg.port}` : 'Arduino disconnected', arduinoConnected ? 'success' : 'info');
+                        log(arduinoConnected ? `Arduino 已连接到 ${msg.port}` : 'Arduino 已断开连接', arduinoConnected ? 'success' : 'info');
                     } else if (msg.error) {
-                        log(`Arduino error: ${msg.error}`, 'error');
+                        log(`Arduino 错误：${translateServerText(msg.error)}`, 'error');
                     }
                     break;
 
                 case 'arduino_test':
-                    log(`Arduino test: ${msg.command}`, 'command');
+                    log(`Arduino 测试：${commandLabel(msg.command)}`, 'command');
                     break;
 
                 case 'error':
-                    log(msg.error, 'error');
+                    log(translateServerText(msg.error), 'error');
                     break;
             }
         }
@@ -1999,11 +2068,15 @@
                 for (let i = 0; i < chData.length; i++) {
                     buf.push(chData[i] * CONFIG.gain);
                 }
-                while (buf.length > maxBufferSize) buf.shift();
+                if (buf.length > maxBufferSize) {
+                    buf.splice(0, buf.length - maxBufferSize);
+                }
             }
 
             timeBuffer.push(...timestamps);
-            while (timeBuffer.length > maxBufferSize) timeBuffer.shift();
+            if (timeBuffer.length > maxBufferSize) {
+                timeBuffer.splice(0, timeBuffer.length - maxBufferSize);
+            }
 
             if (stats) {
                 elements.statSamples.textContent = stats.total_samples.toLocaleString();
@@ -2022,7 +2095,7 @@
             isStreaming = streaming;
 
             elements.statusBadge.className = 'status-badge ' + (streaming ? 'streaming' : (connected ? 'connected' : 'disconnected'));
-            elements.statusText.textContent = streaming ? 'Streaming' : (connected ? 'Connected' : 'Disconnected');
+            elements.statusText.textContent = streaming ? '采集中' : (connected ? '已连接' : '未连接');
 
             elements.connectBtn.disabled = connected;
             elements.disconnectBtn.disabled = !connected;
@@ -2033,14 +2106,14 @@
         }
 
         function updatePortList(ports) {
-            elements.portSelect.innerHTML = '<option value="">Select serial port...</option>';
+            elements.portSelect.innerHTML = '<option value="">请选择串口...</option>';
             ports.forEach(port => {
                 const option = document.createElement('option');
                 option.value = port;
                 option.textContent = port;
                 elements.portSelect.appendChild(option);
             });
-            log(ports.length > 0 ? `Found ${ports.length} port(s)` : 'No ports found', ports.length > 0 ? 'info' : 'error');
+            log(ports.length > 0 ? `发现 ${ports.length} 个串口` : '未发现可用串口', ports.length > 0 ? 'info' : 'error');
         }
 
         // =====================================================================
@@ -2051,8 +2124,8 @@
 
         elements.connectBtn.onclick = () => {
             const port = elements.portInput.value || elements.portSelect.value;
-            if (!port) { log('Please select a port', 'error'); return; }
-            log(`Connecting to ${port}...`, 'info');
+            if (!port) { log('请选择串口', 'error'); return; }
+            log(`正在连接 ${port}...`, 'info');
             ws.send(JSON.stringify({ command: 'connect', port }));
         };
 
@@ -2063,17 +2136,18 @@
 
         elements.gainSelect.onchange = () => {
             CONFIG.gain = parseFloat(elements.gainSelect.value);
-            log(`Gain set to ${elements.gainSelect.value}x`, 'info');
+            log(`增益已设置为 ${elements.gainSelect.value}x`, 'info');
         };
 
         elements.vertScaleSelect.onchange = () => {
             CONFIG.vertScale = parseInt(elements.vertScaleSelect.value);
             updateScaleLabels();
-            log(`Scale set to ${elements.vertScaleSelect.value} uV`, 'info');
+            log(`量程已设置为 ${elements.vertScaleSelect.value} uV`, 'info');
         };
 
         elements.timeWindowSelect.onchange = () => {
             CONFIG.timeWindowSeconds = parseInt(elements.timeWindowSelect.value);
+            trimDisplayWindow();
             updateTimeLabels();
         };
 
@@ -2109,10 +2183,10 @@
         elements.arduinoConnectBtn.onclick = () => {
             const port = elements.arduinoPortSelect.value;
             if (!port) {
-                log('Please select an Arduino port', 'error');
+                log('请选择 Arduino 串口', 'error');
                 return;
             }
-            log(`Connecting to Arduino on ${port}...`, 'info');
+            log(`正在通过 ${port} 连接 Arduino...`, 'info');
             ws.send(JSON.stringify({ command: 'arduino_connect', port }));
         };
 
