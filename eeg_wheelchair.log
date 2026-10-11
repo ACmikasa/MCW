@@ -1,0 +1,59 @@
+2026-01-18 05:26:23,521 [INFO] eeg_wheelchair_control.signal_processor: SignalProcessor initialized (fs=125 Hz)
+2026-01-18 05:26:23,533 [INFO] eeg_wheelchair_control.signal_processor: SignalProcessor initialized (fs=125 Hz)
+2026-01-18 05:26:23,533 [INFO] eeg_wheelchair_control.command_detector: CommandDetector initialized - Ch1=20% (LEFT), Ch3=20% (RIGHT), coupled_reduction=50%, duration=0.1s, cooldown=0.5s
+2026-01-18 05:26:23,536 [WARNING] eeg_wheelchair_control.calibration: Calibration file not found: calibration_profile.json
+2026-01-18 05:28:36,275 [INFO] eeg_wheelchair_control.signal_processor: SignalProcessor initialized (fs=125 Hz)
+2026-01-18 05:28:36,316 [INFO] eeg_wheelchair_control.signal_processor: SignalProcessor initialized (fs=125 Hz)
+2026-01-18 05:28:36,318 [INFO] eeg_wheelchair_control.command_detector: CommandDetector initialized - Ch1=20% (LEFT), Ch3=20% (RIGHT), coupled_reduction=50%, duration=0.1s, cooldown=0.5s
+2026-01-18 05:28:36,319 [WARNING] eeg_wheelchair_control.calibration: Calibration file not found: calibration_profile.json
+2026-01-18 05:29:14,355 [INFO] eeg_wheelchair_control.command_detector: RIGHT: Ch3 changed 25.0% for 0.11s
+2026-01-18 05:29:14,883 [INFO] eeg_wheelchair_control.command_detector: RIGHT: Ch3 changed 27.3% for 0.43s
+2026-01-18 05:29:15,383 [INFO] eeg_wheelchair_control.command_detector: RIGHT: Ch3 changed 20.6% for 0.43s
+2026-01-18 05:29:33,637 [INFO] eeg_wheelchair_control.command_detector: RIGHT: Ch3 changed 23.9% for 0.12s
+2026-01-18 05:29:34,182 [INFO] eeg_wheelchair_control.command_detector: RIGHT: Ch3 changed 27.0% for 0.44s
+2026-01-18 05:29:46,937 [INFO] eeg_wheelchair_control.command_detector: RIGHT: Ch3 changed 23.4% for 0.12s
+2026-01-18 05:29:47,503 [INFO] eeg_wheelchair_control.command_detector: RIGHT: Ch3 changed 40.2% for 0.45s
+2026-01-18 05:29:48,085 [INFO] eeg_wheelchair_control.command_detector: RIGHT: Ch3 changed 41.5% for 0.46s
+2026-01-18 05:29:48,636 [INFO] eeg_wheelchair_control.command_detector: RIGHT: Ch3 changed 51.0% for 0.43s
+2026-01-18 05:29:49,219 [INFO] eeg_wheelchair_control.command_detector: RIGHT: Ch3 changed 56.5% for 0.45s
+2026-01-18 05:29:49,769 [INFO] eeg_wheelchair_control.command_detector: RIGHT: Ch3 changed 44.5% for 0.45s
+2026-01-18 05:29:50,319 [INFO] eeg_wheelchair_control.command_detector: RIGHT: Ch3 changed 29.3% for 0.43s
+2026-01-18 05:30:27,081 [INFO] eeg_wheelchair_control.command_detector: FORWARD: Ch1 changed 20.7% for 0.21s
+2026-01-18 05:30:38,363 [INFO] eeg_wheelchair_control.command_detector: RIGHT: Ch3 changed 29.6% for 0.11s
+2026-01-18 05:30:38,928 [INFO] eeg_wheelchair_control.command_detector: RIGHT: Ch3 changed 32.2% for 0.46s
+2026-01-18 05:30:39,483 [INFO] eeg_wheelchair_control.command_detector: RIGHT: Ch3 changed 28.6% for 0.45s
+2026-01-18 05:30:39,984 [INFO] eeg_wheelchair_control.command_detector: RIGHT: Ch3 changed 26.3% for 0.12s
+2026-01-18 05:31:11,100 [INFO] eeg_wheelchair_control.command_detector: FORWARD: Ch1 changed 25.5% for 0.11s
+2026-01-18 05:31:11,641 [INFO] eeg_wheelchair_control.command_detector: FORWARD: Ch1 changed 35.7% for 0.43s
+2026-01-18 05:31:12,184 [INFO] eeg_wheelchair_control.command_detector: FORWARD: Ch1 changed 35.1% for 0.34s
+2026-01-18 05:31:12,721 [INFO] eeg_wheelchair_control.command_detector: FORWARD: Ch1 changed 33.5% for 0.42s
+2026-01-18 05:31:13,488 [INFO] eeg_wheelchair_control.command_detector: FORWARD: Ch1 changed 30.1% for 0.67s
+2026-01-18 05:31:14,168 [INFO] eeg_wheelchair_control.command_detector: FORWARD: Ch1 changed 25.0% for 0.67s
+2026-01-18 05:31:14,845 [INFO] eeg_wheelchair_control.command_detector: FORWARD: Ch1 changed 20.2% for 0.58s
+2026-01-18 05:47:19,981 [INFO] eeg_wheelchair_control.signal_processor: SignalProcessor initialized (fs=125 Hz)
+2026-01-18 05:47:19,988 [INFO] eeg_wheelchair_control.signal_processor: SignalProcessor initialized (fs=125 Hz)
+2026-01-18 05:47:19,988 [INFO] eeg_wheelchair_control.command_detector: CommandDetector initialized - Ch1=20% (LEFT), Ch3=20% (RIGHT), coupled_reduction=50%, duration=0.1s, cooldown=0.5s
+2026-01-18 05:47:19,988 [WARNING] eeg_wheelchair_control.calibration: Calibration file not found: calibration_profile.json
+2026-01-18 05:48:41,805 [INFO] eeg_wheelchair_control.command_detector: FORWARD: Ch1 changed 24.8% for 0.11s
+2026-01-18 05:48:42,364 [INFO] eeg_wheelchair_control.command_detector: FORWARD: Ch1 changed 24.5% for 0.45s
+2026-01-18 05:59:43,987 [INFO] eeg_wheelchair_control.signal_processor: SignalProcessor initialized (fs=125 Hz)
+2026-01-18 05:59:43,997 [INFO] eeg_wheelchair_control.signal_processor: SignalProcessor initialized (fs=125 Hz)
+2026-01-18 05:59:43,999 [INFO] eeg_wheelchair_control.command_detector: CommandDetector initialized - Ch1=20% (LEFT), Ch3=20% (RIGHT), coupled_reduction=50%, duration=0.1s, cooldown=0.5s
+2026-01-18 05:59:43,999 [WARNING] eeg_wheelchair_control.calibration: Calibration file not found: calibration_profile.json
+2026-01-18 06:00:11,423 [INFO] eeg_wheelchair_control.command_detector: FORWARD: Ch1 changed 23.8% for 0.11s
+2026-01-18 06:00:27,619 [INFO] eeg_wheelchair_control.command_detector: RIGHT: Ch3 changed 22.5% for 0.25s
+2026-01-18 06:00:30,930 [INFO] eeg_wheelchair_control.command_detector: RIGHT: Ch3 changed 27.0% for 0.11s
+2026-01-18 06:00:31,485 [INFO] eeg_wheelchair_control.command_detector: RIGHT: Ch3 changed 24.6% for 0.44s
+2026-01-18 06:00:32,045 [INFO] eeg_wheelchair_control.command_detector: RIGHT: Ch3 changed 22.3% for 0.44s
+2026-01-18 06:00:33,515 [INFO] eeg_wheelchair_control.command_detector: RIGHT: Ch3 changed 21.2% for 0.13s
+2026-01-18 06:00:34,086 [INFO] eeg_wheelchair_control.command_detector: RIGHT: Ch3 changed 22.2% for 0.45s
+2026-01-18 06:00:34,780 [INFO] eeg_wheelchair_control.command_detector: RIGHT: Ch3 changed 21.3% for 0.58s
+2026-01-18 06:03:09,123 [INFO] eeg_wheelchair_control.command_detector: FORWARD: Ch1 changed 22.9% for 0.12s
+2026-01-18 06:05:10,783 [INFO] eeg_wheelchair_control.signal_processor: SignalProcessor initialized (fs=125 Hz)
+2026-01-18 06:05:10,790 [INFO] eeg_wheelchair_control.signal_processor: SignalProcessor initialized (fs=125 Hz)
+2026-01-18 06:05:10,790 [INFO] eeg_wheelchair_control.command_detector: CommandDetector initialized - Ch1=20% (LEFT), Ch3=20% (RIGHT), coupled_reduction=50%, duration=0.1s, cooldown=0.5s
+2026-01-18 06:05:10,790 [WARNING] eeg_wheelchair_control.calibration: Calibration file not found: calibration_profile.json
+2026-01-18 06:24:06,470 [INFO] eeg_wheelchair_control.signal_processor: SignalProcessor initialized (fs=125 Hz)
+2026-01-18 06:24:06,477 [INFO] eeg_wheelchair_control.signal_processor: SignalProcessor initialized (fs=125 Hz)
+2026-01-18 06:24:06,487 [INFO] eeg_wheelchair_control.command_detector: CommandDetector initialized - Ch1=20% (LEFT), Ch3=20% (RIGHT), coupled_reduction=50%, duration=0.1s, cooldown=0.5s
+2026-01-18 06:24:06,489 [WARNING] eeg_wheelchair_control.calibration: Calibration file not found: calibration_profile.json
