@@ -438,6 +438,11 @@
             border-color: rgba(255, 255, 255, 0.1);
         }
 
+        .chart-controls .channel-select {
+            min-width: 150px;
+            max-width: 190px;
+        }
+
         .eeg-display {
             /* flex: 1;  Removed to allow auto-height */
             display: flex;
@@ -1001,6 +1006,8 @@
                         <option value="5" selected>5 秒</option>
                         <option value="10">10 秒</option>
                     </select>
+                    <label for="channel-select">显示通道</label>
+                    <select id="channel-select" class="channel-select" multiple size="1" aria-label="选择要显示的脑电通道" title="按住 Ctrl 或 Command 可多选通道"></select>
                     <button id="clear-btn" class="btn btn-secondary btn-small">清空</button>
                 </div>
             </div>
@@ -1258,6 +1265,7 @@
             gainSelect: document.getElementById('gain-select'),
             vertScaleSelect: document.getElementById('vert-scale'),
             timeWindowSelect: document.getElementById('time-window-select'),
+            channelSelect: document.getElementById('channel-select'),
             logPanel: document.getElementById('log-panel'),
             clearBtn: document.getElementById('clear-btn'),
 
@@ -1281,6 +1289,30 @@
         let channelCanvases = [];
         let channelContexts = [];
         let channelStats = [];
+        let channelEnabled = Array(CONFIG.numChannels).fill(true);
+
+        function syncChannelSelector() {
+            const selector = document.getElementById('channel-select');
+            if (!selector) return;
+            const previous = channelEnabled.slice();
+            selector.innerHTML = '';
+            for (let i = 0; i < CONFIG.numChannels; i++) {
+                const option = document.createElement('option');
+                option.value = String(i);
+                option.textContent = CONFIG.channelLabels[i] || `通道${i + 1}`;
+                option.selected = previous[i] !== false;
+                selector.appendChild(option);
+            }
+        }
+
+        function updateSelectedChannels() {
+            const selector = document.getElementById('channel-select');
+            if (!selector) return;
+            channelEnabled = Array.from({ length: CONFIG.numChannels }, (_, index) =>
+                Boolean(selector.querySelector(`option[value="${index}"]`)?.selected)
+            );
+            initChart();
+        }
 
         function initChart() {
             const container = document.getElementById('eeg-channels');
@@ -1288,8 +1320,14 @@
             channelCanvases = [];
             channelContexts = [];
             channelStats = [];
+            syncChannelSelector();
 
             for (let i = 0; i < CONFIG.numChannels; i++) {
+                if (!channelEnabled[i]) {
+                    channelCanvases[i] = null;
+                    channelContexts[i] = null;
+                    continue;
+                }
                 // Initialize channel stats
                 channelStats.push({
                     railed: 0,
@@ -1358,7 +1396,7 @@
             const ctx = channelContexts[channelIndex];
             const data = dataBuffers[channelIndex];
 
-            if (!canvas || !ctx || !data || data.length === 0) return;
+            if (!canvas || !ctx || !data) return;
 
             const width = canvas.width / 2;  // Account for retina scaling
             const height = canvas.height / 2;
@@ -1366,6 +1404,8 @@
 
             // Clear canvas
             ctx.clearRect(0, 0, width, height);
+
+            if (!channelEnabled[channelIndex] || data.length === 0) return;
 
             // Draw center line
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
@@ -1760,6 +1800,8 @@
             trimDisplayWindow();
             updateTimeLabels();
         };
+
+        elements.channelSelect.onchange = updateSelectedChannels;
 
         elements.clearBtn.onclick = clearChart;
 
