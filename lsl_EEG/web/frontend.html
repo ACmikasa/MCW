@@ -483,6 +483,37 @@
             background: rgba(255, 255, 255, 0.02);
         }
 
+        .channel-resize-handle {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: -4px;
+            height: 9px;
+            z-index: 2;
+            cursor: ns-resize;
+            touch-action: none;
+        }
+
+        .channel-resize-handle::after {
+            content: '';
+            display: block;
+            width: 36px;
+            height: 3px;
+            margin: 3px auto;
+            border-radius: 3px;
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .channel-resize-handle:hover::after,
+        .channel-resize-handle:focus-visible::after {
+            background: #8ebcf0;
+        }
+
+        .channel-resize-handle:focus-visible {
+            outline: 2px solid #8ebcf0;
+            outline-offset: -2px;
+        }
+
         .channel-label {
             width: 36px;
             display: flex;
@@ -1290,6 +1321,54 @@
         let channelContexts = [];
         let channelStats = [];
         let channelEnabled = Array(CONFIG.numChannels).fill(true);
+        const channelHeights = Array(CONFIG.numChannels).fill(50);
+        const MIN_CHANNEL_HEIGHT = 40;
+        const MAX_CHANNEL_HEIGHT = 400;
+
+        function resizeChannelCanvas(channelIndex) {
+            const canvas = channelCanvases[channelIndex];
+            const ctx = channelContexts[channelIndex];
+            if (!canvas || !ctx) return;
+            const rect = canvas.getBoundingClientRect();
+            canvas.width = Math.round(rect.width * 2);
+            canvas.height = Math.round(rect.height * 2);
+            ctx.setTransform(2, 0, 0, 2, 0, 0);
+        }
+
+        function setChannelHeight(channelIndex, height) {
+            const row = document.getElementById(`channel-row-${channelIndex}`);
+            if (!row) return;
+            const nextHeight = Math.round(Math.max(MIN_CHANNEL_HEIGHT, Math.min(MAX_CHANNEL_HEIGHT, height)));
+            channelHeights[channelIndex] = nextHeight;
+            row.style.height = `${nextHeight}px`;
+            row.querySelector('.channel-resize-handle').setAttribute('aria-valuenow', String(nextHeight));
+            resizeChannelCanvas(channelIndex);
+            drawChannel(channelIndex);
+        }
+
+        function setupChannelResize(handle, channelIndex) {
+            handle.addEventListener('pointerdown', event => {
+                if (event.button !== 0) return;
+                event.preventDefault();
+                const startY = event.clientY;
+                const startHeight = channelHeights[channelIndex];
+                handle.setPointerCapture(event.pointerId);
+                const onMove = move => setChannelHeight(channelIndex, startHeight + move.clientY - startY);
+                const onEnd = () => {
+                    handle.removeEventListener('pointermove', onMove);
+                    handle.removeEventListener('pointerup', onEnd);
+                    handle.removeEventListener('pointercancel', onEnd);
+                };
+                handle.addEventListener('pointermove', onMove);
+                handle.addEventListener('pointerup', onEnd);
+                handle.addEventListener('pointercancel', onEnd);
+            });
+            handle.addEventListener('keydown', event => {
+                if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+                event.preventDefault();
+                setChannelHeight(channelIndex, channelHeights[channelIndex] + (event.key === 'ArrowDown' ? 10 : -10));
+            });
+        }
 
         function syncChannelSelector() {
             const selector = document.getElementById('channel-select');
@@ -1339,6 +1418,8 @@
                 // Create channel row
                 const row = document.createElement('div');
                 row.className = 'eeg-channel';
+                row.id = `channel-row-${i}`;
+                row.style.height = `${channelHeights[i]}px`;
                 row.innerHTML = `
                     <div class="channel-label">
                         <div class="channel-num" style="background: ${CONFIG.channelColors[i]}">${CONFIG.channelLabels[i] || i + 1}</div>
@@ -1354,8 +1435,12 @@
                         <span class="not-railed">未超量程 0%</span>
                         <span class="rms">0.00 uVrms</span>
                     </div>
+                    <div class="channel-resize-handle" data-resize-channel="${i}" role="separator" tabindex="0" aria-orientation="horizontal" aria-valuemin="${MIN_CHANNEL_HEIGHT}" aria-valuemax="${MAX_CHANNEL_HEIGHT}" aria-valuenow="${channelHeights[i]}" title="上下拖动调整通道高度（也可使用方向键）"></div>
                 `;
                 container.appendChild(row);
+                const handle = row.querySelector('.channel-resize-handle');
+                handle.setAttribute('aria-label', `调整${CONFIG.channelLabels[i] || `通道${i + 1}`}波形高度`);
+                setupChannelResize(handle, i);
 
                 // Get canvas and context
                 const canvas = document.getElementById(`canvas-ch${i}`);
@@ -1494,6 +1579,20 @@
             }
         }
 
+        // Incoming LSL chunks can arrive faster than the display needs to
+        // refresh. Keep every chunk, but coalesce waveform redraws to 25 Hz.
+        let chartRefreshPending = false;
+        function scheduleChartUpdate() {
+            if (chartRefreshPending) return;
+            chartRefreshPending = true;
+            setTimeout(() => {
+                requestAnimationFrame(() => {
+                    chartRefreshPending = false;
+                    updateChart();
+                });
+            }, 40);
+        }
+
         function clearChart() {
             dataBuffers = [];
             timeBuffer = [];
@@ -1516,13 +1615,8 @@
         function resizeCanvases() {
             channelCanvases.forEach((canvas, i) => {
                 if (canvas) {
-                    const rect = canvas.getBoundingClientRect();
-                    canvas.width = rect.width * 2;
-                    canvas.height = rect.height * 2;
-                    const ctx = channelContexts[i];
-                    if (ctx) {
-                        ctx.scale(2, 2);
-                    }
+                    resizeChannelCanvas(i);
+                    drawChannel(i);
                 }
             });
         }
@@ -1733,7 +1827,7 @@
                 elements.statDropped.textContent = stats.dropped_packets;
             }
 
-            updateChart();
+            scheduleChartUpdate();
         }
 
         // =====================================================================

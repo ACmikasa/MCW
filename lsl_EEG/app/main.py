@@ -14,6 +14,15 @@ from pathlib import Path
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+# Work around a hanging WMI lookup in ``platform.system()`` on some Windows
+# machines. pylsl calls it at import time (see acquisition.lsl_receiver), which
+# makes the process appear to start and then never respond.
+if sys.platform == "win32":
+    import platform
+
+    if hasattr(platform, "_wmi"):
+        platform._wmi = None
+
 from fastapi import Depends, FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
