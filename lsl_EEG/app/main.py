@@ -24,7 +24,7 @@ if sys.platform == "win32":
         platform._wmi = None
 
 from fastapi import Depends, FastAPI, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 import uvicorn
 
@@ -33,6 +33,7 @@ from api.auth_api import SESSION_COOKIE, build_auth_router
 from api.offline_api import build_offline_router
 from api.system_api import build_system_router
 from app.config import SYSTEM_DATA_DIR, UPLOAD_DIR, WEB_DIR, auth_data_dir, session_hours, stream_name, stream_type
+from app.realtime_stream import sse_event
 from services.auth_service import AuthService
 from services.data_service import DataService
 from services.history_service import HistoryService
@@ -199,6 +200,71 @@ def state_message() -> dict:
     }
 
 
+SSE_FRAME_INTERVAL_SECONDS = 0.05
+SSE_HEARTBEAT_SECONDS = 10.0
+
+
+@app.get("/api/realtime/events")
+async def realtime_events(request: Request):
+    """Stream display-sized EEG batches at a stable rate.
+
+    LSL acquisition remains lossless inside its bounded backend window. Each
+    browser receives only data that arrived since its previous display frame;
+    a slow browser skips stale chunks instead of building an unbounded queue.
+    """
+    user = _page_user(request, "realtime:view")
+    if user is None:
+        return HTMLResponse("Unauthorized", status_code=401)
+
+    async def generate():
+        status = receiver.status()
+        last_sequence = status["sequence"]
+        last_heartbeat = time.monotonic()
+        yield "retry: 1000\n\n"
+
+        while not await request.is_disconnected():
+            status = receiver.status()
+            if not status["connected"] or status["sequence"] < last_sequence:
+                last_sequence = status["sequence"]
+
+            if status["connected"] and status["streaming"]:
+                chunks = receiver.chunks_after(last_sequence)
+                if chunks:
+                    sequence, eeg, timestamps, first_index = receiver.combine_chunks(chunks)
+                    sample_count = eeg.shape[1]
+                    elapsed = max(time.time() - receiver.started_at, 0.001)
+                    payload = {
+                        "eeg": eeg.tolist(),
+                        "timestamps": timestamps.tolist(),
+                        "sample_index": first_index,
+                        "stats": {
+                            "total_samples": status["total_samples"],
+                            "dropped_packets": status["dropped_samples"],
+                            "elapsed_seconds": elapsed,
+                            "effective_rate": status["total_samples"] / elapsed,
+                            "frame_samples": sample_count,
+                        },
+                    }
+                    yield sse_event("eeg", payload, sequence)
+                    last_sequence = sequence
+                    last_heartbeat = time.monotonic()
+                elif time.monotonic() - last_heartbeat >= SSE_HEARTBEAT_SECONDS:
+                    yield ": keep-alive\n\n"
+                    last_heartbeat = time.monotonic()
+
+            await asyncio.sleep(SSE_FRAME_INTERVAL_SECONDS)
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
+
+
 async def handle_command(websocket: WebSocket, message: dict, user: dict) -> None:
     command = message.get("command")
     if command == "get_state":
@@ -250,19 +316,16 @@ async def websocket_endpoint(websocket: WebSocket):
         await websocket.close(code=4401)
         return
     await websocket.accept()
-    last_sequence = 0
     last_state_signature = None
     try:
         while True:
             try:
-                message = await asyncio.wait_for(websocket.receive_json(), timeout=0.02)
+                message = await asyncio.wait_for(websocket.receive_json(), timeout=0.25)
                 await handle_command(websocket, message, user)
             except asyncio.TimeoutError:
                 pass
 
             status = receiver.status()
-            if not status["connected"] or status["sequence"] < last_sequence:
-                last_sequence = 0
             state_signature = (
                 status["connected"], status["streaming"], status["name"],
                 status["sampling_rate"], status["num_channels"], status["error"],
@@ -270,26 +333,6 @@ async def websocket_endpoint(websocket: WebSocket):
             if state_signature != last_state_signature:
                 await websocket.send_json(state_message())
                 last_state_signature = state_signature
-
-            if status["connected"] and status["streaming"]:
-                for sequence, eeg, timestamps, first_index in receiver.chunks_after(last_sequence):
-                    sample_count = eeg.shape[1]
-                    elapsed = max(time.time() - receiver.started_at, 0.001)
-                    await websocket.send_json({
-                        "type": "data",
-                        "eeg": eeg.tolist(),
-                        "accel": [],
-                        "timestamps": timestamps.tolist(),
-                        "sample_indices": list(range(first_index, first_index + sample_count)),
-                        "stats": {
-                            "total_samples": status["total_samples"],
-                            "dropped_packets": status["dropped_samples"],
-                            "elapsed_seconds": elapsed,
-                            "effective_rate": status["total_samples"] / elapsed,
-                        },
-                    })
-                    last_sequence = sequence
-            await asyncio.sleep(0.01)
     except WebSocketDisconnect:
         pass
 

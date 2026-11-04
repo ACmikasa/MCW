@@ -39,7 +39,8 @@ python -m venv .venv
 ```text
 lsl_EEG/
 ├─ app/
-│  ├─ main.py              FastAPI 应用、实时 WebSocket、页面路由
+│  ├─ main.py              FastAPI 应用、实时控制/SSE、页面路由
+│  ├─ realtime_stream.py   SSE 协议编码
 │  └─ config.py            运行配置
 ├─ api/
 │  └─ offline_api.py       离线上传和任务查询接口
@@ -126,12 +127,12 @@ LSL 数据源
    ↓
 acquisition/lsl_receiver.py
    ↓
-app/main.py 的 /ws
+app/main.py 的 /api/realtime/events（SSE 数据帧）
    ↓
 web/frontend.html
 ```
 
-实时 WebSocket 的原有消息格式保持不变，因此页面仍然可以接收 `state`、`data`、`connect_result` 等消息。
+`/ws` 只处理连接、开始、停止和状态等双向控制消息；`/api/realtime/events` 以 20 Hz 合并推送仅用于显示的最新 EEG 批次。浏览器落后时会跳过过期批次，不会无限回放积压数据。前端仍兼容 WebSocket `data` 消息，便于旧测试和渐进迁移。
 
 `LSLReceiver` 只负责接入和缓冲，不负责疲劳评分、模型推理或页面逻辑。
 

@@ -942,7 +942,7 @@
     <header class="header">
         <div>
             <h1>OpenBCI 脑电仪表盘</h1>
-            <div class="subtitle">Cyton + Daisy | 16 通道 | 轮椅控制</div>
+            <div class="subtitle">Cyton + Daisy | 16 通道 </div>
         </div>
         <div class="status-badges">
             <a class="offline-link" href="/">首页</a>
@@ -960,7 +960,7 @@
             </div>
             <div id="wheelchair-badge" class="status-badge disconnected" style="display: none;">
                 <span class="status-dot"></span>
-                <span id="wheelchair-status-text">轮椅控制已关闭</span>
+                <span id="wheelchair-status-text">已关闭</span>
             </div>
         </div>
     </header>
@@ -1195,6 +1195,7 @@
 
         const CONFIG = {
             wsUrl: `ws://${window.location.host}/ws`,
+            sseUrl: '/api/realtime/events',
             numChannels: 16,
             sampleRate: 125,
             channelLabels: ['Fp1', 'Fp2', 'F4', 'Fz', 'F3', 'T7', 'C3', 'Cz', 'C4', 'T8', 'P4', 'Pz', 'P3', 'O1', 'Oz', 'O2'],
@@ -1253,6 +1254,7 @@
         // =====================================================================
 
         let ws = null;
+        let eventSource = null;
         let isConnected = false;
         let isStreaming = false;
         let csvRecording = false;
@@ -1609,27 +1611,31 @@
             const samplesPerSecond = CONFIG.sampleRate;
             const samplesToShow = CONFIG.timeWindowSeconds * samplesPerSecond;
             const startIdx = Math.max(0, data.length - samplesToShow);
-            const visibleData = data.slice(startIdx);
+            const visibleLength = data.length - startIdx;
 
-            if (visibleData.length < 2) return;
+            if (visibleLength < 2) return;
 
             // Remove the DC offset for visualization only. The received LSL
-            // samples remain unchanged in the backend and data buffer.
-            const baseline = visibleData.reduce((sum, value) => sum + value, 0) / visibleData.length;
-            const centeredData = visibleData.map(value => value - baseline);
+            // samples remain unchanged in the backend and data buffer. Use
+            // index-based loops to avoid allocating two arrays per channel on
+            // every animation frame.
+            let sum = 0;
+            for (let i = startIdx; i < data.length; i++) sum += data[i];
+            const baseline = sum / visibleLength;
 
             // Calculate stats
             let railedCount = 0;
             let sumSquares = 0;
             const railThreshold = CONFIG.vertScale * 0.95;
 
-            for (const val of centeredData) {
+            for (let i = startIdx; i < data.length; i++) {
+                const val = data[i] - baseline;
                 if (Math.abs(val) > railThreshold) railedCount++;
                 sumSquares += val * val;
             }
 
-            const railedPercent = (railedCount / centeredData.length) * 100;
-            const rms = Math.sqrt(sumSquares / centeredData.length);
+            const railedPercent = (railedCount / visibleLength) * 100;
+            const rms = Math.sqrt(sumSquares / visibleLength);
 
             channelStats[channelIndex] = {
                 railedPercent: railedPercent,
@@ -1651,20 +1657,27 @@
             ctx.lineWidth = 1;
             ctx.beginPath();
 
-            const xStep = width / samplesToShow;
+            const xStep = width / Math.max(samplesToShow - 1, 1);
             const yScale = (height / 2) / CONFIG.vertScale;
 
-            for (let i = 0; i < centeredData.length; i++) {
-                const x = i * xStep;
+            // Never draw substantially more segments than there are physical
+            // pixels. This preserves the live shape while bounding canvas work
+            // when the sampling rate or time window is large.
+            const drawStride = Math.max(1, Math.floor(visibleLength / Math.max(width * 1.5, 1)));
+            let point = 0;
+            for (let i = startIdx; i < data.length; i += drawStride) {
+                const x = point * drawStride * xStep;
                 // Clamp value to scale range
-                const clampedVal = Math.max(-CONFIG.vertScale, Math.min(CONFIG.vertScale, centeredData[i]));
+                const centered = data[i] - baseline;
+                const clampedVal = Math.max(-CONFIG.vertScale, Math.min(CONFIG.vertScale, centered));
                 const y = midY - (clampedVal * yScale);
 
-                if (i === 0) {
+                if (point === 0) {
                     ctx.moveTo(x, y);
                 } else {
                     ctx.lineTo(x, y);
                 }
+                point++;
             }
 
             ctx.stroke();
@@ -1684,8 +1697,8 @@
             }
         }
 
-        // Incoming LSL chunks can arrive faster than the display needs to
-        // refresh. Keep every chunk, but coalesce waveform redraws to 25 Hz.
+        // SSE frames can arrive faster than the screen needs to refresh.
+        // Coalesce redraws to one animation callback, capped near 25 Hz.
         let chartRefreshPending = false;
         function scheduleChartUpdate() {
             if (chartRefreshPending) return;
@@ -1827,6 +1840,29 @@
             });
         }
 
+        function startEventStream() {
+            if (eventSource && eventSource.readyState !== EventSource.CLOSED) return;
+            eventSource = new EventSource(CONFIG.sseUrl);
+            eventSource.addEventListener('eeg', event => {
+                try {
+                    processEEGData(JSON.parse(event.data));
+                } catch (error) {
+                    console.error('SSE 数据解析失败', error);
+                }
+            });
+            eventSource.onerror = () => {
+                // EventSource reconnects automatically. Do not create parallel
+                // connections or flood the page log while the backend restarts.
+                if (isStreaming) console.debug('SSE 暂时断开，等待自动重连');
+            };
+        }
+
+        function stopEventStream() {
+            if (!eventSource) return;
+            eventSource.close();
+            eventSource = null;
+        }
+
         function connectWebSocket() {
             ws = new WebSocket(CONFIG.wsUrl);
 
@@ -1838,6 +1874,7 @@
 
             ws.onclose = () => {
                 log('WebSocket 已断开，正在尝试重连', 'error');
+                stopEventStream();
                 updateUIState(false, false);
                 setTimeout(connectWebSocket, 2000);
             };
@@ -1854,6 +1891,8 @@
             switch (msg.type) {
                 case 'state':
                     updateUIState(msg.is_connected, msg.is_streaming);
+                    if (msg.is_streaming) startEventStream();
+                    else stopEventStream();
                     if (msg.sampling_rate) {
                         updateSamplingRate(msg.sampling_rate);
                         elements.statRate.textContent = `${msg.sampling_rate} Hz`;
@@ -1879,6 +1918,7 @@
                 case 'disconnect_result':
                     if (msg.success) {
                         log('设备连接已断开', 'info');
+                        stopEventStream();
                         updateUIState(false, false);
                     }
                     break;
@@ -1887,11 +1927,13 @@
                         log('数据采集已开始', 'success');
                         updateUIState(true, true);
                         clearChart();
+                        startEventStream();
                     }
                     break;
                 case 'stop_result':
                     if (msg.success) {
                         log(`数据采集已停止，共采集 ${msg.total_samples} 个样本`, 'info');
+                        stopEventStream();
                         updateUIState(true, false);
                     }
                     break;
@@ -2020,6 +2062,7 @@
         updateFatigueSourceStatus();
 
         window.addEventListener('beforeunload', () => {
+            stopEventStream();
             if (ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({ command: 'stop' }));
                 ws.send(JSON.stringify({ command: 'disconnect' }));

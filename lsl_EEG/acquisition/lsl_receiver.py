@@ -155,6 +155,19 @@ class LSLReceiver:
                     break
             return list(reversed(selected))
 
+    @staticmethod
+    def combine_chunks(chunks):
+        """Combine selected chunks into one browser display frame."""
+        if not chunks:
+            raise ValueError("chunks must not be empty")
+        sequence = chunks[-1][0]
+        first_index = chunks[0][3]
+        if len(chunks) == 1:
+            return sequence, chunks[0][1], chunks[0][2], first_index
+        eeg = np.concatenate([item[1] for item in chunks], axis=1)
+        timestamps = np.concatenate([item[2] for item in chunks])
+        return sequence, eeg, timestamps, first_index
+
     def _select_stream(self):
         streams = resolve_streams(wait_time=LSL_RESOLVE_TIMEOUT_SECONDS)
         if not streams:
